@@ -1,0 +1,34 @@
+// yes 3
+
+// ordering of functions in vtable
+
+class Base:
+
+	int funcA(int _):
+		return 6
+
+	int funcA():
+		return 1
+
+	int funcB():
+		return 2
+
+
+class Derived > Base:
+
+	override int funcB():
+		return 4
+
+	override int funcA():
+		return 3
+
+	override int funcA(int _):
+		return 5
+
+
+extern int main():
+	Derived x = new Derived
+	return x.funcA()
+
+
+

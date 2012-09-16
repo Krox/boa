@@ -1,0 +1,23 @@
+module object
+
+
+struct String:
+	size_t length
+	&char ptr
+
+
+struct Interval!(T):
+	T from
+	T to
+
+	T front(): from
+	void popFront(): from += 1
+	bool empty(): from == to
+
+class Object:
+	&&void __vtable
+
+	String toString():
+		return "Object"
+
+

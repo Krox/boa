@@ -1,0 +1,13 @@
+// yes 13
+
+class foo:
+
+	int x
+
+	constructor(int x):
+		this.x = x
+
+extern int main():
+	auto bar = new foo(13)
+	return bar.x
+

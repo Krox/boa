@@ -1,0 +1,19 @@
+// no
+
+// final
+
+class Base:
+
+	final void func():
+		return
+
+
+class Derived > Base:
+
+	override void func():
+		return
+
+extern int main():
+	return 0
+
+

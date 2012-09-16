@@ -1,0 +1,7 @@
+// no
+
+import test8_import1
+import test8_import2
+
+extern int main():
+	return foo()

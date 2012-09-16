@@ -1,0 +1,11 @@
+// yes 3
+
+import test8_import1
+import test8_import2
+
+int foo():
+	return 3
+
+extern int main():
+	return foo()
+

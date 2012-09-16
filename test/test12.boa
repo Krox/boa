@@ -1,0 +1,10 @@
+// yes 9
+extern void __boa_writeInt(int _)
+
+extern int main():
+	int r = 0
+	for x in Interval!(int)(2,5):
+		r += x
+	return r
+
+

@@ -1,0 +1,18 @@
+// no
+
+// override is required
+
+class Base:
+
+	void func():
+		return
+
+
+class Derived > Base:
+
+	void func():
+		return
+
+extern int main():
+	return 0
+

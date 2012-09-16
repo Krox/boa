@@ -1,0 +1,15 @@
+// yes 102
+
+class Base:
+
+	int func():
+		return 101
+
+class Derived > Base:
+
+	override int func():
+		return 102
+
+extern int main():
+	Base x = new Derived
+	return x.func()

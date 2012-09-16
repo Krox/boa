@@ -1,0 +1,21 @@
+// yes 105
+
+class Base:
+
+	int func():
+		return 105
+
+	int foo():
+		return Base.func()
+
+class Derived > Base:
+
+	override int func():
+		return 106
+
+
+
+
+extern int main():
+	Base x = new Derived
+	return x.foo()

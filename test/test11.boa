@@ -1,0 +1,11 @@
+// no
+
+class foo:
+
+	constructor(int x):
+		return
+
+extern int main():
+	new foo		// error: missing constructor-argument
+	return 0
+

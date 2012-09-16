@@ -1,0 +1,4 @@
+// yes 42
+
+extern int main():
+	return 42
