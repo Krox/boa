@@ -74,7 +74,8 @@ final class Aggregate : Type, Environment
 
 		// only for classes, only valid after generating
 		LLVMValueRef[] vtable;
-		LLVMValueRef vtableCode;	// replace with generic init in the future (global const variable)
+		LLVMValueRef vtablePtrCode;	// this is a global constant which points to the vtable
+									// the vtable itself is a global constant which is created lateron in "generate()"
 
 		LLVMTypeRef innerCode;		// valid all the time, but it may be inclomplete before generate(). Not sure, if LLVM likes that in all places
 	}
@@ -104,6 +105,12 @@ final class Aggregate : Type, Environment
 		this.isClass = ast.isClass;
 		this.members = new SymbolTable;
 
+		if(isClass)
+		{
+			this.vtablePtrCode = LLVMAddGlobal(modCode, LLVMPointerType(LLVMInt8Type(),0), toStringz(name~"_vtablePtr"));
+			LLVMSetGlobalConstant(vtablePtrCode, true);
+		}
+
 		this.innerCode = LLVMStructCreateNamed(LLVMGetGlobalContext(), toStringz(name));
 		if(isClass)
 			super(name, LLVMPointerType(innerCode, 0));
@@ -126,7 +133,8 @@ final class Aggregate : Type, Environment
 			superType = cast(Aggregate)genExpression(ast.superClass, enclosing);
 			if(superType is null || !superType.isClass)
 				throw new CompileError("super-class is not a class", ast.loc);
-			superType.declare();
+			superType.generate();	// need the vtable of the superClass
+			this.vtable = superType.vtable.dup;
 		}
 
 		auto fieldCount = ast.superClass ? 1 : 0;
@@ -182,38 +190,14 @@ final class Aggregate : Type, Environment
 		// build the vtable
 		if(isClass)
 		{
-			if(superType is null)
-				this.vtable = new LLVMValueRef[0];	// one entry for classinfo
-			else
-				this.vtable = superType.vtable.dup;
+			foreach(method; virtualMethods)
+				method.declare();	// make sure all functions which need vtable-indices have them
+			vtableLocked = true;
 
-
-			outer: foreach(method; virtualMethods)
-			{
-				for(auto s = this.superType; s !is null; s = s.superType)
-					if(auto _old = s.members.lookup(method.ident))
-					{
-						auto old = cast(FunctionSet)_old;
-						if(old is null)
-							throw new Exception("function overriding a non-function");
-
-						auto table = method.buildTable(old.vtableOffset);
-						this.vtable[method.vtableOffset .. method.vtableOffset + table.length] = table[];
-
-						continue outer;
-					}
-
-				// not found -> new indices
-				auto offset = cast(int)vtable.length;
-				vtable ~= method.buildTable(offset);
-			}
-
-			auto arr = LLVMConstArray(LLVMPointerType(LLVMInt8Type(),0), vtable.ptr, cast(uint)vtable.length);
-			this.vtableCode = LLVMAddGlobal(modCode, LLVMArrayType(LLVMPointerType(LLVMInt8Type(),0), cast(uint)vtable.length), toStringz("vtable_"~this.name));
-			//LLVMSetLinkage(this.vtableCode, LLVMLinkage.WeakODR);
-
-			LLVMSetGlobalConstant(vtableCode, true);
-			LLVMSetInitializer(vtableCode, arr);
+			auto vt = LLVMAddGlobal(modCode, LLVMArrayType(LLVMPointerType(LLVMInt8Type(),0), cast(int)vtable.length), toStringz(name~"_vtable"));
+			LLVMSetGlobalConstant(vt, true);
+			LLVMSetInitializer(vt, LLVMConstArray(LLVMPointerType(LLVMInt8Type(),0), vtable.ptr, cast(uint)vtable.length));
+			LLVMSetInitializer(vtablePtrCode, LLVMConstPointerCast(vt, LLVMPointerType(LLVMInt8Type(),0)));
 		}
 
 
@@ -226,6 +210,22 @@ final class Aggregate : Type, Environment
 		foreach(field; fields)
 			elemTypeCodes[field.id] = field.type.code;	// remember: field.id does not always start at 0
 		LLVMStructSetBody(innerCode, elemTypeCodes.ptr, cast(uint)elemTypeCodes.length, /*packed=*/false);
+	}
+
+	bool vtableLocked = false;	// this is just for an assert, no real functionality
+
+	int registerVirtualFunction(LLVMValueRef funCode, int id = -1)	// if id==-1, a new index will be assigned and returned
+	{
+		declare();	// in order to build super-type and get a default vtable from there
+		assert(!vtableLocked, "cant assign vtable-indices after class has been generated "~to!string(genStatus));
+		if(id == -1)
+		{
+			id = cast(int)vtable.length;
+			vtable.length = id+1;
+		}
+
+		vtable[id] = funCode;
+		return id;
 	}
 
 
@@ -282,9 +282,10 @@ final class Aggregate : Type, Environment
 		auto val = new RValue(newCode, this);
 
 		// set the hidden vtable pointer		// future: may want to do a full blit of some init structure
-		auto vtable = LLVMBuildBitCast(env.envBuilder, vtableCode, LLVMPointerType(LLVMPointerType(LLVMInt8Type(),0),0), "vtable");
-		auto location = LLVMBuildBitCast(env.envBuilder, newCode, LLVMPointerType(LLVMPointerType(LLVMPointerType(LLVMInt8Type(),0),0),0), "__vtable");	// this assumes that '__vtable' is the very first field
-		LLVMBuildStore(env.envBuilder, vtable, location);
+		auto a = LLVMBuildBitCast(env.envBuilder, vtablePtrCode, LLVMPointerType(LLVMPointerType(LLVMPointerType(LLVMInt8Type(),0),0),0), "vtablePtr");
+		auto b = LLVMBuildLoad(env.envBuilder, a, "vtable");
+		auto location = LLVMBuildBitCast(env.envBuilder, newCode, LLVMPointerType(LLVMPointerType(LLVMPointerType(LLVMInt8Type(),0),0),0), "vtableLoc");	// this assumes that '__vtable' is the very first field
+		LLVMBuildStore(env.envBuilder, b, location);
 
 		// call constructor
 		if(constructor !is null)

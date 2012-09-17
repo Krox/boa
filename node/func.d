@@ -76,7 +76,7 @@ private final class Template
 		if(code in instances)
 			return instances[code];
 
-		auto func = new Instance(outer.name~"!("~code~")", ast, outer.enclosing, outer.thisType);
+		auto func = new Instance(outer.name~"!("~code~")", ast, outer.enclosing, outer.thisType, outer.superFun, outer.isVirtual);
 		foreach(i; 0..args.length)
 			func.locals.add(ast.tempParams[i].ident, args[i]);
 
@@ -98,7 +98,7 @@ final class FunctionSet : Value
 		bool isFinal;		// only meaningful if isVirtual==true
 	}
 
-	private
+	package
 	{
 		Environment enclosing;		// enclosing Module/Struct/...
 		Aggregate thisType;				// null for global/static functions
@@ -171,10 +171,16 @@ final class FunctionSet : Value
 			if(ast.tempParams !is null)
 				templates ~= new Template(this, ast);
 			else
-				simpleInstances ~= new Instance(name, ast, enclosing, thisType);
+				simpleInstances ~= new Instance(name, ast, enclosing, thisType, superFun, isVirtual);
 
 		if(templates.length && isVirtual)
 			throw new CompileError("templated virtual methods not supported", templates[0].ast.loc);
+	}
+
+	void declare()
+	{
+		foreach(x; simpleInstances)
+			x.declare();
 	}
 
 	private int simpleDispatch(Value[] args, Location loc)
@@ -279,62 +285,6 @@ final class FunctionSet : Value
 			virt = new Virt(this);
 		return virt;
 
-	}
-
-
-	int _vtableOffset = -1;
-	@property int vtableOffset()
-	{
-		assert(_vtableOffset != -1);
-		return _vtableOffset;
-	}
-
-	final LLVMValueRef[] buildTable(int offset)	// superFun may be null
-	{
-		assert(isVirtual);
-		if(!hasThis)
-			throw new Exception("virtual function without 'this' doesn't make sense");
-		if(templates.length > 0)
-			throw new Exception("virtual template functions are not supported");
-
-		assert(_vtableOffset == -1, "call buildTable only once");
-		_vtableOffset = offset;
-
-		if(superFun is null)
-		{
-			auto r = new LLVMValueRef[simpleInstances.length];
-			foreach(int i, inst; simpleInstances)
-			{
-				r[i] = LLVMConstPointerCast(inst.eval(null), LLVMPointerType(LLVMInt8Type(),0));
-				inst.vtableIndex = offset + i;
-			}
-			return r;
-		}
-		else
-		{
-			auto r = new LLVMValueRef[superFun.simpleInstances.length];
-
-			outer: foreach(inst; simpleInstances)
-			{
-				foreach(i, otherInst; superFun.simpleInstances)
-					if(inst.type.isSignatureEqual(otherInst.type))
-					{
-						if(r[i] !is null)
-							throw new Exception("multiple overriding");
-						r[i] = LLVMConstPointerCast(inst.eval(null), LLVMPointerType(LLVMInt8Type(),0));
-						inst.vtableIndex = otherInst.vtableIndex;
-						assert(inst.vtableIndex == i+offset);
-						continue outer;
-					}
-				throw new Exception("nothing to override with this function");
-			}
-
-			foreach(x; r)
-				if(x is null)
-					throw new Exception("something not overridden");
-
-			return r;
-		}
 	}
 
 	//////////////////////////////////////////////////////////////////////

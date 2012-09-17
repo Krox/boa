@@ -30,6 +30,7 @@ final class Instance : Value, Environment
 		FunctionAst ast;
 		Environment  enclosing;
 		Aggregate thisType;
+		FunctionSet superFun;
 
 		// only valid after declare has been called
 		LLVMValueRef funCode;
@@ -41,6 +42,8 @@ final class Instance : Value, Environment
 		Value thisPtr;
 
 		package LocalSymbolTable locals;	// valid whole time	(in order to put some symbols - like template-parameter - inside before generating)
+
+		bool isVirtual;
 
 		int status = 0;	// 0: none, 1: declaring, 2: declared, 3: generating 4: generated
 	}
@@ -54,17 +57,8 @@ final class Instance : Value, Environment
 
 	@property int vtableIndex()
 	{
-		if(thisType !is null)
-			thisType.generate();
-		assert(_vtableIndex >= 0, "fail in function "~name~(*cast(string*)1));
+		assert(_vtableIndex >= 0, "fail in function "~name);
 		return _vtableIndex;
-	}
-
-	@property void vtableIndex(int newVal)
-	{
-		assert(newVal >= 0);
-		assert(_vtableIndex < 0);
-		_vtableIndex = newVal;
 	}
 
 
@@ -72,20 +66,22 @@ final class Instance : Value, Environment
 	/// constructor / generate
 	//////////////////////////////////////////////////////////////////////
 
-	public this(string name, FunctionAst ast, Environment enclosing, Aggregate thisType)
+	public this(string name, FunctionAst ast, Environment enclosing, Aggregate thisType, FunctionSet superFun, bool isVirtual)
 	{
 		assert(enclosing !is null);
 		this.name = name;
 		this.ast = ast;
 		this.enclosing = enclosing;
 		this.thisType = thisType;	// may be null
+		this.superFun = superFun;
+		this.isVirtual = isVirtual;
 
 		this.locals = new LocalSymbolTable;
 
 		todoList ~= &this.generate;
 	}
 
-	private void declare()
+	package void declare()
 	{
 		if(status == 1)	throw new CompileError("cyclic definition of function", ast.loc);
 		if(status >= 2)	return;
@@ -113,6 +109,33 @@ final class Instance : Value, Environment
 			LLVMSetValueName(LLVMGetParam(this.funCode, 0), "this");
 		foreach(i; 0..params.length)
 			LLVMSetValueName(LLVMGetParam(this.funCode, cast(uint)i+offset), toStringz(ast.params[i].name));
+
+		////////
+		if(isVirtual)
+		{
+			// TODO: check override/final/virtual, multi/no-overriding
+			assert(thisType !is null);
+
+			auto vtableElemCode = LLVMConstPointerCast(this.funCode, LLVMPointerType(LLVMInt8Type(),0));
+
+			if(superFun is null)
+			{
+				_vtableIndex = thisType.registerVirtualFunction(vtableElemCode);
+			}
+			else
+			{
+				bool found = false;
+				foreach(i, otherInst; superFun.simpleInstances)
+					if(funType.isSignatureEqual(otherInst.type))
+					{
+						_vtableIndex = thisType.registerVirtualFunction(vtableElemCode, otherInst.vtableIndex);
+						found = true;
+						break;
+					}
+				if(!found)
+					throw new CompileError("nothing to override with this function", this.ast.loc);
+			}
+		}
 	}
 
 	private void generate()
