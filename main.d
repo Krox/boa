@@ -26,6 +26,7 @@ import codegen;
 import llvm.Target;
 import core.memory;
 import std.getopt;
+import node.mod;
 
 int main(string[] args)
 {
@@ -35,7 +36,7 @@ int main(string[] args)
 		bool dump = false;
 		getopt(args, std.getopt.config.passThrough,
 				"dump", &dump,
-				"I", &importPaths);
+				"I", &Module.importPaths);
 
 		if(args.length != 2)
 		{
@@ -73,7 +74,7 @@ int main(string[] args)
 			return -2;
 		}
 
-		foreach(Module m; modulesByName)
+		foreach(Module m; Module.moduleCache)
 			if(m.constructor !is null)
 				LLVMRunFunction(ee, m.constructor.eval(mainModule), 0, null);	// 'mainModule' is kind of a dummy here
 

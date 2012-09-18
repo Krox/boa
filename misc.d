@@ -1,21 +1,5 @@
 module misc;
 
-private import std.array : indexOf, lastIndexOf, replace, join;
-private import std.path : baseName, stripExtension;
-
-
-string[] filenameToModule(string filename)
-{
-	assert(filename.length>0);
-	return [baseName(stripExtension(filename))];
-}
-
-string moduleToFilename(string[] idents)
-{
-	assert(idents.length>0);
-	return join(idents, "/")~".boa";
-}
-
 
 enum Attribute
 {

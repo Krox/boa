@@ -25,69 +25,13 @@ private import node.type;
 private import literal;
 private import std.path;
 private import std.file : FileException, exists;
+private import node.mod;
 
 LLVMModuleRef modCode;
 LLVMPassManagerRef fpm;
 Node[string] builtins;
 LLVMBuilderRef dummyBuilder;	// does not point to a function, and is not actually used if everything goes fine
 void delegate() [] todoList;
-string[] importPaths;
-
-string findFilename(string base)
-{
-	if(isAbsolute(base))
-		return base;
-	else if(exists(absolutePath(base)))
-		return absolutePath(base);
-	else foreach(path; importPaths)
-		if(exists(buildNormalizedPath(path, base)))
-			return buildNormalizedPath(path, base);
-	throw new Exception("file not found: "~base);
-}
-
-static Module[string] modulesByFilename;
-static Module[string] modulesByName;
-
-Module getModule(string filename)
-{
-	/// find the source file
-	filename = findFilename(filename);
-	assert(isAbsolute(filename));
-
-	/// check if it is cached
-	if(filename in modulesByFilename)
-		return modulesByFilename[filename];
-
-	/// load the source
-	string source;
-	{
-		auto file = File(filename);
-		ulong size = file.size;
-		if(size <= 0 || size > 4000000000U)
-			throw new CompileError("source file empty or too large", new Location(filename, 0));
-		auto buf = new char[cast(size_t)size+20];
-		buf[cast(size_t)size..$] = "    \n__EOF__        ";
-		file.rawRead(buf[0..$-20]);
-		source = assumeUnique(buf);
-	}
-
-	/// lexing
-	auto ts = lex(filename, source);
-
-	/// parsing
-	auto modAst = parse(ts, filenameToModule(filename), filename);
-
-	/// create the module
-	auto mod = new Module(modAst);
-
-	/// cache it
-	if(mod.fullName in modulesByName)
-		throw new Exception("two modules with same name imported: "~mod.fullName ~ " (file: "~filename~")");
-	modulesByName[mod.fullName] = mod;
-	modulesByFilename[filename] = mod;
-
-	return mod;
-}
 
 // call this exactly once
 Module compile(string filename)	// may want to take several filenames in the future
@@ -129,7 +73,7 @@ Module compile(string filename)	// may want to take several filenames in the fut
 	LLVMAddGVNPass(fpm);
 	LLVMAddCFGSimplificationPass(fpm);
 
-	auto mainModule = getModule(absolutePath(filename));
+	auto mainModule = Module.get(filename);
 
 	while(todoList.length > 0)
 	{

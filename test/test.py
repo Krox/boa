@@ -21,7 +21,7 @@ def testFile(filename):
 	logfile.flush()
 	logfile.write("===== Running: "+filename+" =====\n");
 	logfile.flush()
-	got = subprocess.call(["./../bin/boa", "-I/home/krox/devel/boa/import", filename], stdout=logfile, stderr=subprocess.STDOUT)
+	got = subprocess.call(["./../bin/boa", "-I../import", filename], stdout=logfile, stderr=subprocess.STDOUT)
 	if got == expect:
 		return ""
 

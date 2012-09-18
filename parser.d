@@ -4,13 +4,14 @@ private import base.stack;
 private import misc;
 private import tokenstream;
 private import ast;
+private import std.path : baseName, stripExtension;
 
 class parse
 {
-	public static ModuleAst opCall(TokenStream ts, string[] idents, string filename)
+	public static ModuleAst opCall(TokenStream ts)
 	{
 		auto obj = new parse(ts);
-		return obj.parseModule(idents, filename);
+		return obj.parseModule(baseName(stripExtension(ts.filename)));
 	}
 
 	private TokenStream ts;
@@ -20,16 +21,20 @@ class parse
 		this.ts = ts;
 	}
 
-	private ModuleAst parseModule(string[] idents, string filename)	// the name is only used if the module has no own module-statement
+	private ModuleAst parseModule(string defaultName)	// the default name is used if there is no 'module' statement
 	{
 		DeclarationAst[] decls;
 		ImportAst[] imports;
+		string[] idents;
+		auto loc = ts.currLoc;
 
 		if(ts.tryMatch(Tok.Module))
 		{
 			idents = parseDotIdents();
 			ts.match(Tok.Semi);
 		}
+		else
+			idents = [defaultName];
 
 		while(!ts.peek(Tok.EOF))
 		{
@@ -41,7 +46,7 @@ class parse
 			else throw new CompileError("only declarations and imports allowed on module scope", d.loc);
 		}
 
-		return new ModuleAst(idents, decls, imports, new Location(filename,1));
+		return new ModuleAst(idents, decls, imports, loc);
 	}
 
 	string[] parseDotIdents()
