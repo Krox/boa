@@ -264,7 +264,7 @@ final class Instance : Value, Environment
 
 			Value retValue;
 			if(ast.expr !is null)	// evaluate the expression ( even if the function returns void! )
-				retValue = funType.retType.implicitCast(this, genExpression(ast.expr, this).asValue);
+				retValue = genExpression(ast.expr, this).asValue.implicitCast(this, funType.retType, ast.loc);
 
 			if(funType.retType is VoidType())
 				LLVMBuildRetVoid(builder);
@@ -326,7 +326,7 @@ final class Instance : Value, Environment
 
 			// loop header (conditional and such)
 			LLVMPositionBuilderAtEnd(builder, condBB);
-			auto cond = BoolType().implicitCast(this, enforce(range.lookup(this, "empty")).call(/*env*/this, /*args*/null, /*thisPtr*/null, ast.loc));
+			auto cond = enforce(range.lookup(this, "empty")).call(/*env*/this, /*args*/null, /*thisPtr*/null, ast.loc).implicitCast(this, BoolType(), ast.loc);
 			LLVMBuildCondBr(builder, cond.eval(this), elseBB, forBB);
 
 			// main block header
@@ -366,8 +366,7 @@ final class Instance : Value, Environment
 			if(elseBB is null)
 				elseBB = afterBB;
 
-
-			auto condCode = BoolType().implicitCast(this, genExpression(ast.expr, this).asValue).eval(this);
+			auto condCode = genExpression(ast.expr, this).asValue.implicitCast(this, BoolType(), ast.loc).eval(this);
 			LLVMBuildCondBr(builder, condCode, thenBB, elseBB);
 
 			LLVMPositionBuilderAtEnd(builder, thenBB);
@@ -389,12 +388,12 @@ final class Instance : Value, Environment
 		/// Assert statement
 		else if(auto  ast = cast(AssertAst)_ast)
 		{
-			// this is the place to ignoe it if asserts are turned off
+			// this is the place to ignore it if asserts are turned off
 
 			auto triggerBB = LLVMAppendBasicBlock(funCode, "assert_trigger");
 			auto afterBB = LLVMAppendBasicBlock(funCode, "afterAssert");
 
-			auto condCode = BoolType().implicitCast(this, genExpression(ast.expr, this).asValue).eval(this);
+			auto condCode = genExpression(ast.expr, this).asValue.implicitCast(this, BoolType(), ast.loc).eval(this);
 			LLVMBuildCondBr(builder, condCode, afterBB, triggerBB);
 
 			LLVMPositionBuilderAtEnd(builder, triggerBB);
@@ -422,7 +421,7 @@ final class Instance : Value, Environment
 
 			LLVMValueRef initCode;
 			if(initValue !is null)
-				initCode = type.implicitCast(this, initValue).eval(this);
+				initCode = initValue.implicitCast(this, type, ast.loc).eval(this);
 			else
 				initCode = type.initCode;
 			LLVMBuildStore(builder, initCode, code);

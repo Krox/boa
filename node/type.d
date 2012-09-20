@@ -36,46 +36,12 @@ abstract class Type : Node
 		return name;
 	}
 
-	bool isCastable(Type oldTy)
-	{
-		if(oldTy == this)
-			return true;
-		return false;
-	}
-
-	// null if not possible
-	Value tryCast(Environment env, Value val, bool explicit)
-	{
-		if(val.type == this)
-			return val;
-		return null;
-	}
-
-	// convenience function
-	final Value implicitCast(Environment env, Value val)
-	{
-		auto r = tryCast(env, val, false);
-		if(r is null)
-			throw new Exception("cannot implicitly convert expression of type "~val.type.toString~" to "~this.toString);
-
-		return r;
-	}
-
-	// convenience function
-	final Value explicitCast(Environment env, Value val)
-	{
-		auto r = tryCast(env, val, true);
-		if(r is null)
-			throw new Exception("cannot explicitly convert expression of type "~val.type.toString~" to "~this.toString);
-		return r;
-	}
-
 	override Node index(Environment env, Node[] args, Location loc)
 	{
 		if(args.length != 1)
 			throw new CompileError("static arrays have to be 1-dimensional", loc);
 
-		auto val = IntType.size_t.implicitCast(env, args[0].asValue).eval(env);
+		auto val = args[0].asValue.implicitCast(env, IntType.size_t, loc).eval(env);
 
 		if(!LLVMIsConstant(val))
 			throw new CompileError("static array size has to be a compile-time constant", loc);
@@ -170,49 +136,6 @@ final class PointerType : Type
 		return base.pointerType;
 	}
 
-	/// casting something to pointer
-	override Value tryCast(Environment env, Value val, bool explicit)
-	{
-		auto r = super.tryCast(env, val, explicit);
-		if(r)
-			return r;
-
-		if(val.isGenericNull)	// implicit null -> any pointer
-			return new RValue(LLVMConstPointerNull(this.code), this);
-
-		if(auto origType = cast(PointerType)val.type)	// pointer -> pointer
-		{
-			if(!explicit && this.base != VoidType())
-				return null;	// implicit pointer casts only to void-ptr
-
-			auto code = LLVMBuildPointerCast(env.envBuilder, val.eval(env), this.code, "ptrCast");
-			return new RValue(code, this);	// its basically the same, but always a RValue
-		}
-
-		if(auto origType = cast(StaticArrayType)val.type)
-			if(origType.base is this.base)
-			{
-				auto code = LLVMBuildPointerCast(env.envBuilder, val.evalRef(env), this.code, "arr2ptrCast");
-				return new RValue(code, this);
-			}
-
-		if(explicit)
-		{
-			if(auto origType = cast(IntType)val.type)
-			{
-				//missing: explicit int->pointer cast
-			}
-
-			if(auto origType = cast(FunctionType)val.type)
-			{
-				auto code = LLVMBuildBitCast(env.envBuilder, val.eval(env), this.code, "fun2ptrCast");
-				return new RValue(code, this);
-			}
-		}
-
-		return null;	// cant cast
-	}
-
 	override Value valueIndex(Environment env, Value lhs, Value[] args, Location loc)
 	{
 		if(args.length != 1)
@@ -221,7 +144,7 @@ final class PointerType : Type
 
 		auto self = lhs.eval(env);
 		LLVMValueRef[] ind;
-		ind ~= IntType.size_t.implicitCast(env, args[0]).eval(env);
+		ind ~= args[0].implicitCast(env, IntType.size_t, loc).eval(env);
 		auto memberVal = LLVMBuildGEP(env.envBuilder, self, ind.ptr, cast(uint)ind.length, "ptrElem");
 		return new LValue(memberVal, base);
 	}
@@ -269,7 +192,7 @@ final class StaticArrayType : Type
 		auto self = lhs.evalRef(env);	// TODO: rvalue static-arrays anybody?
 		LLVMValueRef[] ind;
 		ind ~= LLVMConstInt(LLVMInt32Type(), 0, false);
-		ind ~= IntType.size_t.implicitCast(env, args[0]).eval(env);
+		ind ~= args[0].implicitCast(env, IntType.size_t, loc).eval(env);
 		auto elemCode = LLVMBuildGEP(env.envBuilder, self, ind.ptr, cast(uint)ind.length, "arrayElem");
 		return new LValue(elemCode, base);
 	}
@@ -356,7 +279,7 @@ final class FunctionType : Type
 			if(params[i].type == a.type)
 				continue;
 
-			if(!params[i].type.isCastable(a.type))
+			if(!a.isCastable(params[i].type))
 				return 0;
 			r = 1;
 		}
@@ -390,7 +313,7 @@ final class FunctionType : Type
 				thisPtr = env.envThisPtr;
 			if(thisPtr is null)	// no this supplied
 				throw new CompileError("need 'this' to call " ~ lhs.toString ~ "'", loc);
-			thisPtr = thisType.tryCast(env, thisPtr, false);	// implicit cast the 'this'
+			thisPtr = thisPtr.tryCast(env, thisType, false);	// implicit cast the 'this'
 			if(thisPtr is null)		// type of this
 				throw new CompileError("wrong 'this' type to call '" ~ lhs.toString ~ "'", loc);
 		}
@@ -401,9 +324,9 @@ final class FunctionType : Type
 		auto offset = (thisType !is null) ? 1 : 0;
 		auto argCodes = new LLVMValueRef[params.length+offset];
 		if(thisType !is null)
-			argCodes[0] = thisType.implicitCast(env, thisPtr).eval(env, thisByRef);
+			argCodes[0] = thisPtr.implicitCast(env, thisType, loc).eval(env, thisByRef);
 		foreach(i, a; args)
-			argCodes[i+offset] = params[i].type.implicitCast(env, a).eval(env, params[i].byRef);
+			argCodes[i+offset] = a.implicitCast(env, params[i].type, loc).eval(env, params[i].byRef);
 
 		// build the call itself
 		auto retValueCode = LLVMBuildCall(env.envBuilder, lhs.eval(env), argCodes.ptr, cast(uint)argCodes.length, "");	// NOTE: llvm needs empty name for void funcs, but its a silly choice for non-empty ones

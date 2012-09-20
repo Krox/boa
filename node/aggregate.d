@@ -244,32 +244,6 @@ final class Aggregate : Type, Environment
 		return member;
 	}
 
-	override Value tryCast(Environment env, Value val, bool explicit)
-	{
-		auto r = super.tryCast(env, val, explicit);
-		if(r)
-			return r;
-
-		if(isClass)
-			if(auto otherTy = cast(Aggregate)val.type)
-				if(otherTy.isClass)
-				{
-					declare();
-					int i = 0;
-					for(auto agg = otherTy; agg !is null; agg = agg.superType, ++i)
-						if(agg == this)
-						{
-							otherTy.generate();	// llvm doesnt like GEP on opaque (could be circumvented by using bit-cast instead, I think)
-							auto ind = new LLVMValueRef[i+1];
-							ind[] = LLVMConstInt(LLVMInt32Type(), 0, 0);
-							auto superCode = LLVMBuildGEP(env.envBuilder, val.eval(env), ind.ptr, cast(uint)ind.length, "superCast");
-							return new RValue(superCode, this);
-						}
-				}
-
-		return null;
-	}
-
 	final override Value newInstance(Environment env, Value[] args, Location loc)
 	{
 		generate();
@@ -342,12 +316,24 @@ final class Aggregate : Type, Environment
 		{
 			LLVMValueRef code = initCode();
 			foreach(i, arg; args)
-				code = LLVMBuildInsertValue(env.envBuilder, code, fields[i].type.implicitCast(env, arg).eval(env), fields[i].id, "");
+				code = LLVMBuildInsertValue(env.envBuilder, code, arg.implicitCast(env, fields[i].type, loc).eval(env), fields[i].id, "");
 			return new RValue(code, /*type=*/this);
 		}
 		else
 			throw new Exception("class opCall not implemented");
 
+	}
+
+	// true if this  class derives from 'other' class, possibly indirectly
+	bool derivesFrom(Aggregate other)
+	{
+		assert(this.isClass && other.isClass);
+		if(other is this)
+			return true;
+		declare();
+		if(superType is null)
+			return false;
+		return superType.derivesFrom(other);
 	}
 
 	//////////////////////////////////////////////////////////////////////

@@ -25,11 +25,6 @@ final class VoidType : Type
 	{
 		super("void", LLVMVoidType());
 	}
-
-	override Value tryCast(Environment env, Value val, bool explicit)
-	{
-		return new RValue(null, this);
-	}
 }
 
 final class BoolType : Type
@@ -69,22 +64,6 @@ final class CharType : Type
 	private this()
 	{
 		super("char", LLVMInt8Type());	// in some future i want this to be a UTF32 character... or maybe not
-	}
-
-	override Value tryCast(Environment env, Value val, bool explicit)
-	{
-		auto r = super.tryCast(env, val, explicit);
-		if(r)
-			return r;
-
-		if(explicit)
-			if(auto origType = cast(IntType)val.type)
-			{
-				auto c = LLVMBuildTrunc(env.envBuilder, val.eval(env), this.code, "int2char");
-				return new RValue(c, this);
-			}
-
-		return null;
 	}
 
 	override Value valueBinary(Environment env, Tok op, Value lhs, Value rhs, Location loc)
@@ -161,67 +140,6 @@ final class IntType : Type
 		super(name, LLVMIntType(numBits));
 	}
 
-	override bool isCastable(Type _oldTy)
-	{
-		auto r = super.isCastable(_oldTy);
-		if(r)
-			return r;
-
-		auto oldTy = cast(IntType)_oldTy;
-		if(oldTy is null)
-			return false;
-
-		if(oldTy.numBits > numBits)
-			return false;
-		//if(oldTy.signed && !signed)
-		//	return false;
-		if(!oldTy.signed && signed && (oldTy.numBits == numBits))
-			return false;
-
-		return true;
-	}
-
-	override Value tryCast(Environment env, Value val, bool explicit)
-	{
-		auto r = super.tryCast(env, val, explicit);
-		if(r)
-			return r;
-
-		if(auto oldTy = cast(IntType)val.type)
-		{
-			if(!explicit)
-			{
-				if(oldTy.numBits > numBits)			// large -> small
-					return null;
-
-				//if(oldTy.signed && !this.signed)	// signed -> unsigned
-				//	return null;
-
-				if(!oldTy.signed && this.signed && (oldTy.numBits == numBits))	// same size unsigned->signed
-					return null;
-			}
-
-			LLVMValueRef newCode;
-			if(oldTy.numBits > this.numBits)
-				newCode = LLVMBuildTrunc(env.envBuilder, val.eval(env), this.code, "trunc");
-			else if(oldTy.signed)
-				newCode = LLVMBuildSExt(env.envBuilder, val.eval(env), this.code, "signExt");
-			else
-				newCode = LLVMBuildZExt(env.envBuilder, val.eval(env), this.code, "zeroExt");
-
-			return new RValue(newCode, this);
-		}
-
-		if(auto oldTy = cast(PointerType)val.type)
-		if(explicit)
-		{
-			auto newCode = LLVMBuildBitCast(env.envBuilder, val.eval(env), this.code, "ptrToInt");
-			return new RValue(newCode, this);
-		}
-
-		return null;
-	}
-
 	override Value valueUnary(Environment env, Tok op, Value lhs, Location loc)
 	{
 		if(op == Tok.Sub)
@@ -237,8 +155,8 @@ final class IntType : Type
 		{
 			IntType ty = IntType(max(typeA.numBits, typeB.numBits), typeA.signed && typeB.signed);	// implicit conversions small->large and signed->unsigned
 
-			auto a = ty.implicitCast(env, lhs).eval(env);
-			auto b = ty.implicitCast(env, rhs).eval(env);
+			auto a = lhs.implicitCast(env, ty, loc).eval(env);
+			auto b = rhs.implicitCast(env, ty, loc).eval(env);
 
 			switch(op)
 			{
@@ -360,49 +278,6 @@ final class FloatType : Type
 		this.numBits = numBits;
 		this.name = name;
 		super(name, code);
-	}
-
-	override bool isCastable(Type _oldTy)
-	{
-		auto r = super.isCastable(_oldTy);
-		if(r)
-			return r;
-
-		if(auto oldTy = cast(FloatType)_oldTy)
-			return (oldTy.numBits <= numBits);
-
-		if(auto oldTy = cast(IntType)_oldTy)
-			return true;
-
-		return false;
-	}
-
-	override Value tryCast(Environment env, Value val, bool explicit)
-	{
-		auto r = super.tryCast(env, val, explicit);
-		if(r)
-			return r;
-
-        if(auto oldTy = cast(FloatType)val.type)
-        {
-        	if(oldTy.numBits < numBits || explicit)
-        	{
-				auto valCode = LLVMBuildFPCast(env.envBuilder, val.eval(env), this.code, "fpCast");
-				return new RValue(valCode, this);
-			}
-        }
-
-        if(auto oldTy = cast(IntType)val.type)
-        {
-        	LLVMValueRef valCode;
-        	if(oldTy.signed)
-				valCode = LLVMBuildSIToFP(env.envBuilder, val.eval(env), this.code, "intToFloat");
-			else
-				valCode = LLVMBuildUIToFP(env.envBuilder, val.eval(env), this.code, "intToFloat");
-			return new RValue(valCode, this);
-        }
-
-        return null;
 	}
 }
 

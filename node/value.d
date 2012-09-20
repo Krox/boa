@@ -67,6 +67,176 @@ abstract class Value : Node
 	{
 		return null;	// I dont see any case, where you can instantiate a value, but maybe I'm missing something
 	}
+
+	// implicitly cast to another type
+	Value implicitCast(Environment env, Type destType, Location loc)
+	{
+		auto r = tryCast(env, destType, false);
+		if(r is null)
+			throw new CompileError("cannot implicitly convert expression of type "~type.toString~" to "~destType.toString, loc);
+
+		return r;
+	}
+
+	// explicitly cast to another type, i.e. the '::' operator
+	Value explicitCast(Environment env, Type destType, Location loc)
+	{
+		auto r = tryCast(env, destType, true);
+		if(r is null)
+			throw new CompileError("cannot explicitly convert expression of type "~type.toString~" to "~destType.toString, loc);
+		return r;
+	}
+
+	// true if value is implicity castable
+	bool isCastable(Type destType)
+	{
+		if(this.type is destType)
+			return true;
+
+		return false;
+
+		// TODO: do this function properly and function overloading should work (again)
+	}
+
+	// null if not possible
+	final Value tryCast(Environment env, Type destType, bool explicit)
+	{
+		// already right type: return it unaltered (NOTE: this is the only case a rvalue can come out of a cast)
+		if(this.type is destType)
+			return this;
+
+		// anything -> void
+		if(destType is VoidType())
+			return new RValue(null, destType);
+
+		// generic null -> any pointer
+		if(this.isGenericNull)
+			if(auto newTy = cast(PointerType)destType)
+				return new RValue(LLVMConstPointerNull(newTy.code), newTy);
+
+		// int -> int
+		if(auto oldTy = cast(IntType)this.type)
+			if(auto newTy = cast(IntType)destType)
+			{
+				// disallow large -> small casts when not explicit
+				if(!explicit)
+					if(oldTy.numBits > newTy.numBits)
+						return null;
+
+				LLVMValueRef newCode;
+				if(oldTy.numBits > newTy.numBits)
+					newCode = LLVMBuildTrunc(env.envBuilder, eval(env), newTy.code, "trunc");
+				else if(oldTy.signed)
+					newCode = LLVMBuildSExt(env.envBuilder, eval(env), newTy.code, "signExt");
+				else
+					newCode = LLVMBuildZExt(env.envBuilder, eval(env), newTy.code, "zeroExt");
+
+				return new RValue(newCode, newTy);
+			}
+
+		// int -> char
+		if(auto oldTy = cast(IntType)this.type)
+			if(auto newTy = cast(CharType)destType)
+			{
+				if(!explicit)
+					return null;
+
+				return new RValue(LLVMBuildTrunc(env.envBuilder, eval(env), newTy.code, "int2char"), newTy);	// as char is only 8bit, it is save to always use a trunc
+			}
+
+		// float -> float
+		if(auto oldTy = cast(FloatType)this.type)
+			if(auto newTy = cast(FloatType)destType)
+			{
+				// disallow large -> small casts when not explicit
+				if(!explicit)
+					if(oldTy.numBits > newTy.numBits)
+						return null;
+
+				return new RValue(LLVMBuildFPCast(env.envBuilder, eval(env), newTy.code, "floatCast"), newTy);
+			}
+
+		// int -> float
+		if(auto oldTy = cast(IntType)this.type)
+			if(auto newTy = cast(FloatType)destType)
+			{
+				LLVMValueRef valCode;
+				if(oldTy.signed)
+					valCode = LLVMBuildSIToFP(env.envBuilder, eval(env), newTy.code, "intToFloat");
+				else
+					valCode = LLVMBuildUIToFP(env.envBuilder, eval(env), newTy.code, "intToFloat");
+				return new RValue(valCode, newTy);
+			}
+
+		// float -> int
+		if(auto oldTy = cast(FloatType)this.type)
+			if(auto newTy = cast(IntType)destType)
+			{
+				if(!explicit)	// disallow if cast is implicit
+					return null;
+
+				LLVMValueRef valCode;
+				if(newTy.signed)
+					valCode = LLVMBuildFPToSI(env.envBuilder, eval(env), newTy.code, "floatToInt");
+				else
+					valCode = LLVMBuildFPToUI(env.envBuilder, eval(env), newTy.code, "floatToInt");
+				return new RValue(valCode, newTy);
+			}
+
+		// ptr -> int
+		if(auto oldTy = cast(PointerType)this.type)
+			if(auto newTy = cast(IntType)destType)
+			{
+				if(!explicit)	// disallow if cast is implicit
+					return null;
+
+				return new RValue(LLVMBuildPtrToInt(env.envBuilder, eval(env), newTy.code, "ptrToInt"), newTy);
+			}
+
+		// int -> ptr
+		if(auto oldTy = cast(IntType)this.type)
+			if(auto newTy = cast(PointerType)destType)
+			{
+				if(!explicit)	// disallow if cast is implicit
+					return null;
+
+				return new RValue(LLVMBuildIntToPtr(env.envBuilder, eval(env), newTy.code, "intToPtr"), newTy);
+			}
+
+		// ptr -> ptr
+		if(auto oldTy = cast(PointerType)this.type)
+			if(auto newTy = cast(PointerType)destType)
+			{
+				if(!explicit && newTy.base !is VoidType())	// implicit pointer casts only to void-ptr
+					return null;
+
+				return new RValue(LLVMBuildPointerCast(env.envBuilder, eval(env), newTy.code, "ptrCast"), newTy);
+			}
+
+		// static array -> ptr (NOTE: only works with lvalue static arrays)
+		if(auto oldTy = cast(StaticArrayType)this.type)
+			if(auto newTy = cast(PointerType)destType)
+			{
+				if(!explicit && oldTy.base !is newTy.base)
+					return null;
+
+				return new RValue(LLVMBuildPointerCast(env.envBuilder, evalRef(env), newTy.code, "arr2ptrCast"), newTy);
+			}
+
+		// class -> class
+		if(auto oldTy = cast(Aggregate)this.type)
+			if(auto newTy = cast(Aggregate)destType)
+			{
+				if(!oldTy.isClass || !newTy.isClass)
+					return null;
+				if(!oldTy.derivesFrom(newTy))
+					return null;
+				return new RValue(LLVMBuildPointerCast(env.envBuilder, eval(env), newTy.code, "superCast"), newTy);
+			}
+
+		// no valid cast found
+		return null;
+	}
 }
 
 final class RValue : Value
@@ -232,7 +402,7 @@ final class GlobalVariable : Value
 		LLVMValueRef initCode;
 		if(initValue !is null)
 		{
-			initCode = _type.implicitCast(enclosing, initValue).eval(enclosing);
+			initCode = initValue.implicitCast(enclosing, _type, ast.loc).eval(enclosing);
 			if(!LLVMIsConstant(initCode))
 				throw new CompileError("global variable initializer not (compile-time) constant", ast.loc);
 		}

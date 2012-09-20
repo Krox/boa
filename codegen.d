@@ -117,14 +117,14 @@ Node genExpression(ExpressionAst _ast, Environment env)	// env is for symbol-loo
 		{
 			auto ty = genExpression(ast.lhs, env).asType;
 			auto val = genExpression(ast.rhs, env).asValue;
-			return ty.explicitCast(env, val);
+			return val.explicitCast(env, ty, ast.loc);
 		}
 
 		if(ast.op == Tok.Assign)
 		{
 			auto lhs = genExpression(ast.lhs, env).asValue;
 			auto rhs = genExpression(ast.rhs, env).asValue;
-			LLVMBuildStore(env.envBuilder, lhs.type.implicitCast(env,rhs).eval(env), lhs.evalRef(env));
+			LLVMBuildStore(env.envBuilder, rhs.implicitCast(env, lhs.type, ast.loc).eval(env), lhs.evalRef(env));
 			return lhs;
 		}
 
@@ -151,7 +151,7 @@ Node genExpression(ExpressionAst _ast, Environment env)	// env is for symbol-loo
 		{
 			if(index.args.length != 1)
 				throw new CompileError("only one-dimensional array allocation supported", ast.loc);
-			auto count = IntType.size_t.implicitCast(env, genExpression(index.args[0], env).asValue);
+			auto count = genExpression(index.args[0], env).asValue.implicitCast(env, IntType.size_t, ast.loc);
 			auto type = genExpression(index.lhs, env).asType;
 			return type.newArray(env, count);
 		}
