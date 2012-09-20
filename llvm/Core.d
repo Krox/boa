@@ -36,20 +36,28 @@ extern(C):
 
 alias int LLVMBool;
 
-/* Opaque types. */
+// Opaque types. do NOT use the empty structs itself but only the 'Ref'-types
+struct __LLVMContext{}
+alias __LLVMContext* LLVMContextRef;
+struct __LLVMModule{}
+alias __LLVMModule* LLVMModuleRef;
+struct __LLVMType{}
+alias __LLVMType* LLVMTypeRef;
+struct __LLVMValue{}
+alias __LLVMValue* LLVMValueRef;
+struct __LLVMBasicBlock{}
+alias __LLVMBasicBlock* LLVMBasicBlockRef;
+struct __LLVMBuilder{}
+alias __LLVMBuilder* LLVMBuilderRef;
+struct __LLVMMemoryBuffer{}
+alias __LLVMMemoryBuffer* LLVMMemoryBufferRef;
+struct __LLVMPassManager{}
+alias __LLVMPassManager* LLVMPassManagerRef;
+struct __LLVMUse{};
+alias __LLVMUse* LLVMUseRef;
+struct __LLVMModuleProvider{}
+alias __LLVMModuleProvider* LLVMModuleProviderRef;
 
-
-alias void* LLVMContextRef;
-alias void* LLVMModuleRef;
-alias void* LLVMTypeRef;
-alias void* LLVMTypeHandleRef;
-alias void* LLVMValueRef;
-alias void* LLVMBasicBlockRef;
-alias void* LLVMBuilderRef;
-alias void* LLVMModuleProviderRef;
-alias void* LLVMMemoryBufferRef;
-alias void* LLVMPassManagerRef;
-alias void* LLVMUseRef;
 
 enum LLVMAttribute {
     ZExt       = 1<<0,
@@ -362,13 +370,6 @@ LLVMTypeRef LLVMLabelTypeInContext(LLVMContextRef C);
 LLVMTypeRef LLVMVoidType();
 LLVMTypeRef LLVMLabelType();
 //LLVMTypeRef LLVMOpaqueType();
-
-/* Operations on type handles */
-//LLVMTypeHandleRef LLVMCreateTypeHandle(LLVMTypeRef PotentiallyAbstractTy);
-void LLVMRefineType(LLVMTypeRef AbstractTy, LLVMTypeRef ConcreteTy);
-//LLVMTypeRef LLVMResolveTypeHandle(LLVMTypeHandleRef TypeHandle);
-void LLVMDisposeTypeHandle(LLVMTypeHandleRef TypeHandle);
-
 
 /*===-- Values ------------------------------------------------------------===*/
 
