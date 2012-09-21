@@ -2,7 +2,7 @@ module symboltable;
 
 private import node.node;
 private import base.stack;
-private import llvm.Core;
+
 
 final class SymbolTable
 {

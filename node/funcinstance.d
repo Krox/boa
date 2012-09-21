@@ -2,9 +2,7 @@ module node.funcinstance;
 
 private import std.algorithm : map;
 private import std.array : join;
-
 private import llvm.Core;
-
 private import base.stack;
 private import misc;
 private import ast;

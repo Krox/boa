@@ -7,7 +7,6 @@ private import misc;
 private import tokenstream;
 private static import std.conv;
 
-import std.stdio;
 
 final class lex
 {
@@ -199,7 +198,7 @@ final class lex
 			default: assert(false);
 		}
 		if(count == 0)
-			throw new Exception("malformed numeral literal: no digits");
+			throw new CompileError("malformed numeral literal: no digits", new Location(filename, linenumber));
 
 		// fractional part
 		if(source[pos] == '.')
@@ -216,7 +215,7 @@ final class lex
 				default: assert(false);
 			}
 			if(count == 0)
-				throw new Exception("malformed numeral literal: no fractional digits");
+				throw new CompileError("malformed numeral literal: no fractional digits", new Location(filename, linenumber));
 		}
 
 		// exponent
@@ -231,7 +230,7 @@ final class lex
 					++pos;
 
 				if(munch!"_0123456789" == 0)
-					throw new Exception("malformed num literal: missing exponent");
+					throw new CompileError("malformed num literal: missing exponent", new Location(filename, linenumber));
 			}
 		}
 		else	// radix = 2,8,16
@@ -245,11 +244,11 @@ final class lex
 					++pos;
 
 				if(munch!"_0123456789" == 0)
-					throw new Exception("malformed num literal: missing exponent");
+					throw new CompileError("malformed num literal: missing exponent", new Location(filename, linenumber));
 			}
 			else
 				if(isFloat)
-					throw new Exception("exponent part required");
+					throw new CompileError("exponent part required", new Location(filename, linenumber));
 		}
 
 

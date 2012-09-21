@@ -1,17 +1,11 @@
 module node.node;
 
-
-private import std.string : toStringz;
-private import std.array : join;
 private import llvm.Core;
 private import misc;
 private import node.value;
 private import node.type;
-private import node.func;
-private import codegen;
-private import symboltable;
 private import ast;
-private import node.aggregate;
+
 
 class Node
 {

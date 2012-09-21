@@ -320,7 +320,7 @@ final class Aggregate : Type, Environment
 			return new RValue(code, /*type=*/this);
 		}
 		else
-			throw new Exception("class opCall not implemented");
+			throw new CompileError("class opCall not implemented", loc);
 
 	}
 

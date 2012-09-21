@@ -401,7 +401,7 @@ class parse
 				if(ts.tryMatch(Tok.Semi))	// just an expression
 				{
 					if(expr is null)
-						throw new Exception("sole 'auto' doesnt make sense");
+						throw new CompileError("sole 'auto' doesnt make sense", loc);
 					return expr;
 				}
 
