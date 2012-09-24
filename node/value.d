@@ -115,93 +115,49 @@ abstract class Value : Node
 				return new RValue(LLVMConstPointerNull(newTy.code), newTy);
 
 		// int -> int
-		if(auto oldTy = cast(IntType)this.type)
-			if(auto newTy = cast(IntType)destType)
+		if(auto oldTy = cast(NumType)this.type)
+			if(auto newTy = cast(NumType)destType)
 			{
 				// disallow large -> small casts when not explicit
 				if(!explicit)
 					if(oldTy.numBits > newTy.numBits)
 						return null;
 
-				LLVMValueRef newCode;
-				if(oldTy.numBits > newTy.numBits)
-					newCode = LLVMBuildTrunc(env.envBuilder, eval(env), newTy.code, "trunc");
-				else if(oldTy.signed)
-					newCode = LLVMBuildSExt(env.envBuilder, eval(env), newTy.code, "signExt");
-				else
-					newCode = LLVMBuildZExt(env.envBuilder, eval(env), newTy.code, "zeroExt");
-
-				return new RValue(newCode, newTy);
+				return new RValue(NumType.numericCast(env, eval(env), oldTy, newTy), newTy);
 			}
 
 		// int -> char
-		if(auto oldTy = cast(IntType)this.type)
-			if(auto newTy = cast(CharType)destType)
-			{
-				if(!explicit)
-					return null;
-
-				return new RValue(LLVMBuildTrunc(env.envBuilder, eval(env), newTy.code, "int2char"), newTy);	// as char is only 8bit, it is save to always use a trunc
-			}
-
-		// float -> float
-		if(auto oldTy = cast(FloatType)this.type)
-			if(auto newTy = cast(FloatType)destType)
-			{
-				// disallow large -> small casts when not explicit
-				if(!explicit)
-					if(oldTy.numBits > newTy.numBits)
+		if(auto oldTy = cast(NumType)this.type)
+			if(oldTy.kind != NumType.Kind.floating)
+				if(auto newTy = cast(CharType)destType)
+				{
+					if(!explicit)
 						return null;
 
-				return new RValue(LLVMBuildFPCast(env.envBuilder, eval(env), newTy.code, "floatCast"), newTy);
-			}
-
-		// int -> float
-		if(auto oldTy = cast(IntType)this.type)
-			if(auto newTy = cast(FloatType)destType)
-			{
-				LLVMValueRef valCode;
-				if(oldTy.signed)
-					valCode = LLVMBuildSIToFP(env.envBuilder, eval(env), newTy.code, "intToFloat");
-				else
-					valCode = LLVMBuildUIToFP(env.envBuilder, eval(env), newTy.code, "intToFloat");
-				return new RValue(valCode, newTy);
-			}
-
-		// float -> int
-		if(auto oldTy = cast(FloatType)this.type)
-			if(auto newTy = cast(IntType)destType)
-			{
-				if(!explicit)	// disallow if cast is implicit
-					return null;
-
-				LLVMValueRef valCode;
-				if(newTy.signed)
-					valCode = LLVMBuildFPToSI(env.envBuilder, eval(env), newTy.code, "floatToInt");
-				else
-					valCode = LLVMBuildFPToUI(env.envBuilder, eval(env), newTy.code, "floatToInt");
-				return new RValue(valCode, newTy);
-			}
+					return new RValue(LLVMBuildTrunc(env.envBuilder, eval(env), newTy.code, "int2char"), newTy);	// as char is only 8bit, it is save to always use a trunc
+				}
 
 		// ptr -> int
 		if(auto oldTy = cast(PointerType)this.type)
-			if(auto newTy = cast(IntType)destType)
-			{
-				if(!explicit)	// disallow if cast is implicit
-					return null;
+			if(auto newTy = cast(NumType)destType)
+				if(newTy.kind != NumType.Kind.floating)
+				{
+					if(!explicit)	// disallow if cast is implicit
+						return null;
 
-				return new RValue(LLVMBuildPtrToInt(env.envBuilder, eval(env), newTy.code, "ptrToInt"), newTy);
-			}
+					return new RValue(LLVMBuildPtrToInt(env.envBuilder, eval(env), newTy.code, "ptrToInt"), newTy);
+				}
 
 		// int -> ptr
-		if(auto oldTy = cast(IntType)this.type)
-			if(auto newTy = cast(PointerType)destType)
-			{
-				if(!explicit)	// disallow if cast is implicit
-					return null;
+		if(auto oldTy = cast(NumType)this.type)
+			if(oldTy.kind != NumType.Kind.floating)
+				if(auto newTy = cast(PointerType)destType)
+				{
+					if(!explicit)	// disallow if cast is implicit
+						return null;
 
-				return new RValue(LLVMBuildIntToPtr(env.envBuilder, eval(env), newTy.code, "intToPtr"), newTy);
-			}
+					return new RValue(LLVMBuildIntToPtr(env.envBuilder, eval(env), newTy.code, "intToPtr"), newTy);
+				}
 
 		// ptr -> ptr
 		if(auto oldTy = cast(PointerType)this.type)
@@ -292,17 +248,33 @@ final class RValue : Value
 	}
 
 	// numeric literal
-	this(IntType type, ulong value)
+	this(NumType type, ulong value)
 	{
 		this._type = type;
-		this.code = LLVMConstInt(type.code, value, type.signed);
+
+		final switch(type.kind)
+		{
+			case NumType.Kind.unsigned: this.code = LLVMConstInt(type.code, value, false); break;
+			case NumType.Kind.signed:   this.code = LLVMConstInt(type.code, value, true ); break;
+			case NumType.Kind.floating: this.code = LLVMConstReal(type.code, value); break;
+		}
 	}
 
-	// float literal. Value has to be LLVM-compatible (decimal, no '_')
-	this(FloatType type, string value)
+	// numeric literal. Value has to be LLVM-compatible (decimal, no '_')
+	this(NumType type, string value)
 	{
 		this._type = type;
-		this.code = LLVMConstRealOfStringAndSize(type.code, value.ptr, cast(uint)value.length);
+
+		final switch(type.kind)
+		{
+			case NumType.Kind.signed:
+			case NumType.Kind.unsigned:
+				this.code = LLVMConstIntOfStringAndSize(type.code, value.ptr, cast(uint)value.length, 10);
+				break;
+			case NumType.Kind.floating:
+				this.code = LLVMConstRealOfStringAndSize(type.code, value.ptr, cast(uint)value.length);
+				break;
+		}
 	}
 }
 

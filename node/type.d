@@ -41,7 +41,7 @@ abstract class Type : Node
 		if(args.length != 1)
 			throw new CompileError("static arrays have to be 1-dimensional", loc);
 
-		auto val = args[0].asValue.implicitCast(env, IntType.size_t, loc).eval(env);
+		auto val = args[0].asValue.implicitCast(env, NumType.size_t, loc).eval(env);
 
 		if(!LLVMIsConstant(val))
 			throw new CompileError("static array size has to be a compile-time constant", loc);
@@ -58,7 +58,7 @@ abstract class Type : Node
 	{
 		switch(field)
 		{
-			case "sizeof":		return new RValue(LLVMSizeOf(code), IntType.size_t);
+			case "sizeof":		return new RValue(LLVMSizeOf(code), NumType.size_t);
 			// missing: init, min/max for integers, inf/nan for floats
 			default: return null;
 		}
@@ -104,7 +104,7 @@ abstract class Type : Node
 
 	final Value newArray(Environment env, Value count)
 	{
-		assert(count.type is IntType.size_t);
+		assert(count.type is NumType.size_t);
 
 		auto newCode = LLVMBuildArrayMalloc(env.envBuilder, this.code, count.eval(env), "newArray");
 		return new RValue(newCode, PointerType(this));
@@ -144,7 +144,7 @@ final class PointerType : Type
 
 		auto self = lhs.eval(env);
 		LLVMValueRef[] ind;
-		ind ~= args[0].implicitCast(env, IntType.size_t, loc).eval(env);
+		ind ~= args[0].implicitCast(env, NumType.size_t, loc).eval(env);
 		auto memberVal = LLVMBuildGEP(env.envBuilder, self, ind.ptr, cast(uint)ind.length, "ptrElem");
 		return new LValue(memberVal, base);
 	}
@@ -192,7 +192,7 @@ final class StaticArrayType : Type
 		auto self = lhs.evalRef(env);	// TODO: rvalue static-arrays anybody?
 		LLVMValueRef[] ind;
 		ind ~= LLVMConstInt(LLVMInt32Type(), 0, false);
-		ind ~= args[0].implicitCast(env, IntType.size_t, loc).eval(env);
+		ind ~= args[0].implicitCast(env, NumType.size_t, loc).eval(env);
 		auto elemCode = LLVMBuildGEP(env.envBuilder, self, ind.ptr, cast(uint)ind.length, "arrayElem");
 		return new LValue(elemCode, base);
 	}

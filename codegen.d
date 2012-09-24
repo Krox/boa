@@ -36,22 +36,22 @@ Module compile(string filename)	// may want to take several filenames in the fut
 	builtins["void"] = VoidType();
 	builtins["bool"] = BoolType();
 	builtins["char"] = CharType();
-	builtins["byte"] = IntType.i8;
-	builtins["ubyte"] = IntType.u8;
-	builtins["short"] = IntType.i16;
-	builtins["ushort"] = IntType.u16;
-	builtins["int"] = IntType.i32;
-	builtins["uint"] = IntType.u32;
-	builtins["long"] = IntType.i64;
-	builtins["ulong"] = IntType.u64;
-	builtins["cent"] = IntType.i128;
-	builtins["ucent"] = IntType.u128;
-	builtins["size_t"] = IntType.size_t;
-	builtins["ssize_t"] = IntType.ssize_t;
-	builtins["float"] = FloatType(32);
-	builtins["double"] = FloatType(64);
-	builtins["real"] = FloatType(80);
-	builtins["quad"] = FloatType(128);
+	builtins["byte"] = NumType.i8;
+	builtins["ubyte"] = NumType.u8;
+	builtins["short"] = NumType.i16;
+	builtins["ushort"] = NumType.u16;
+	builtins["int"] = NumType.i32;
+	builtins["uint"] = NumType.u32;
+	builtins["long"] = NumType.i64;
+	builtins["ulong"] = NumType.u64;
+	builtins["cent"] = NumType.i128;
+	builtins["ucent"] = NumType.u128;
+	builtins["size_t"] = NumType.size_t;
+	builtins["ssize_t"] = NumType.ssize_t;
+	builtins["float"] = NumType.f32;
+	builtins["double"] = NumType.f64;
+	builtins["real"] = NumType.f80;
+	builtins["quad"] = NumType.f128;
 	builtins["false"] = new RValue(LLVMConstInt(LLVMInt1Type(), 0, 0), BoolType());
 	builtins["true"] = new RValue(LLVMConstInt(LLVMInt1Type(), 1, 0), BoolType());
 
@@ -147,7 +147,7 @@ Node genExpression(ExpressionAst _ast, Environment env)	// env is for symbol-loo
 		{
 			if(index.args.length != 1)
 				throw new CompileError("only one-dimensional array allocation supported", ast.loc);
-			auto count = genExpression(index.args[0], env).asValue.implicitCast(env, IntType.size_t, ast.loc);
+			auto count = genExpression(index.args[0], env).asValue.implicitCast(env, NumType.size_t, ast.loc);
 			auto type = genExpression(index.lhs, env).asType;
 			return type.newArray(env, count);
 		}

@@ -45,7 +45,7 @@ Value createStringLiteral(Environment env, string source)
 	}
 
 	auto raw_string = new RValue(env.envBuilder, r.data);	// this is of type char-ptr
-	return enforce(env.lookupSymbol("String"), "no 'String' type found. check your std-library?").call(env, [new RValue(IntType.size_t, r.data.length), raw_string], null, new Location("<TODO>",0));
+	return enforce(env.lookupSymbol("String"), "no 'String' type found. check your std-library?").call(env, [new RValue(NumType.size_t, r.data.length), raw_string], null, new Location("<TODO>",0));
 }
 
 Value createCharLiteral(string source)
@@ -157,7 +157,7 @@ Value createIntLiteral(string source)
 		max /= 2;
 	ulong val = convertDigits(source, max, radix);
 
-	return new RValue(IntType(bits, signed), val);
+	return new RValue(NumType(bits, signed?NumType.Kind.signed:NumType.Kind.unsigned), val);
 }
 
 Value createFloatLiteral(string source)
@@ -178,6 +178,6 @@ Value createFloatLiteral(string source)
 			val[k++] = c;
 	val = val[0..k];
 
-	return new RValue(FloatType(bits), assumeUnique(val));
+	return new RValue(NumType(bits, NumType.Kind.floating), assumeUnique(val));
 }
 

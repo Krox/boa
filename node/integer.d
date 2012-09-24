@@ -87,197 +87,237 @@ final class CharType : Type
 }
 
 
-/// integer types of various sizes
-final class IntType : Type
+/// integer and float types
+final class NumType : Type
 {
-	static IntType i8, u8;
-	static IntType i16, u16;
-	static IntType i32, u32;
-	static IntType i64, u64;
-	static IntType i128, u128;
-	static IntType size_t, ssize_t;
+	enum Kind
+	{
+		unsigned,	// make sure its ordered the way implcit casts are legal
+		signed,
+		floating,
+	}
+
+	static NumType u8, u16, u32, u64, u128;
+	static NumType i8, i16, i32, i64, i128;
+	static NumType f32, f64, f80, f128;
+	static NumType size_t, ssize_t;
 
 	const uint numBits;
-	const bool signed;
+	const Kind kind;
 
 	static this()
 	{
-		i8 = new IntType(8, true, "byte");		u8 = new IntType(8, false, "ubyte");
-		i16 = new IntType(16, true, "short");	u16 = new IntType(16, false, "ushort");
-		i32 = new IntType(32, true, "int");	u32 = new IntType(32, false, "uint");
-		i64 = new IntType(64, true, "long");	u64 = new IntType(64, false, "ulong");
-		i128 = new IntType(128, true, "cent");	u128 = new IntType(128, false, "ucent");
-		size_t = u64;		// TODO: do sth smarter
-		ssize_t = i64;
+		u8   = new NumType(LLVMInt8Type(),   8,   Kind.unsigned, "ubyte");
+		u16  = new NumType(LLVMInt16Type(),  16,  Kind.unsigned, "ushort");
+		u32  = new NumType(LLVMInt32Type(),  32,  Kind.unsigned, "uint");
+		u64  = new NumType(LLVMInt64Type(),  64,  Kind.unsigned, "ulong");
+		u128 = new NumType(LLVMIntType(128), 128, Kind.unsigned, "ucent");
+
+		i8   = new NumType(LLVMInt8Type(),   8,   Kind.signed, "byte");
+		i16  = new NumType(LLVMInt16Type(),  16,  Kind.signed, "short");
+		i32  = new NumType(LLVMInt32Type(),  32,  Kind.signed, "int");
+		i64  = new NumType(LLVMInt64Type(),  64,  Kind.signed, "long");
+		i128 = new NumType(LLVMIntType(128), 128, Kind.signed, "cent");
+
+		f32  = new NumType(LLVMFloatType(),   32,  Kind.floating, "float");
+		f64  = new NumType(LLVMDoubleType(),  64,  Kind.floating, "double");
+		f80  = new NumType(LLVMX86FP80Type(), 80,  Kind.floating, "real");
+		f128 = new NumType(LLVMFP128Type(),   128, Kind.floating, "quad");
+
+		static if((void*).sizeof == 4)
+		{
+			size_t = u32;
+			ssize_t = i32;
+		}
+		else
+		{
+			size_t = u64;
+			ssize_t = i64;
+		}
 	}
 
-	static IntType opCall(uint numBits, bool signed)
+	static NumType opCall(uint numBits, Kind kind)
 	{
-		if(signed) switch(numBits)
+		final switch(kind)
 		{
-			case   8: return i8;
-			case  16: return i16;
-			case  32: return i32;
-			case  64: return i64;
-			case 128: return i128;
-			default: assert(false);
-		}
-		else switch(numBits)
-		{
-			case   8: return u8;
-			case  16: return u16;
-			case  32: return u32;
-			case  64: return u64;
-			case 128: return u128;
-			default: assert(false);
+			case Kind.unsigned: final switch(numBits)
+			{
+				case   8: return u8;
+				case  16: return u16;
+				case  32: return u32;
+				case  64: return u64;
+				case 128: return u128;
+			}
+			case Kind.signed: final switch(numBits)
+			{
+				case   8: return i8;
+				case  16: return i16;
+				case  32: return i32;
+				case  64: return i64;
+				case 128: return i128;
+			}
+			case Kind.floating: final switch(numBits)
+			{
+				case  32: return f32;
+				case  64: return f64;
+				case  80: return f80;
+				case 128: return f128;
+			}
 		}
 	}
 
-	private this(uint numBits, bool signed, string name)
+	private this(LLVMTypeRef code, uint numBits, Kind kind, string name)
 	{
 		this.numBits = numBits;
-		this.signed = signed;
-		super(name, LLVMIntType(numBits));
+		this.kind = kind;
+		super(name, code);
+	}
+
+	static LLVMValueRef numericCast(Environment env, LLVMValueRef val, NumType from, NumType to)
+	{
+		if(from is to)
+			return val;
+
+		if(from.kind == Kind.floating)
+			final switch(to.kind)
+			{
+				case Kind.unsigned: return LLVMBuildFPToUI(env.envBuilder, val, to.code, "fp2int");
+				case Kind.signed:   return LLVMBuildFPToSI(env.envBuilder, val, to.code, "fp2int");
+				case Kind.floating: return LLVMBuildFPCast(env.envBuilder, val, to.code, "fpCast");
+			}
+
+		if(to.kind == Kind.floating)
+			final switch(from.kind)
+			{
+				case Kind.unsigned: return LLVMBuildUIToFP(env.envBuilder, val, to.code, "int2fp");
+				case Kind.signed:   return LLVMBuildSIToFP(env.envBuilder, val, to.code, "int2fp");
+				case Kind.floating: assert(false);
+			}
+
+		if(from.numBits == to.numBits)
+			return val;
+		else if(from.numBits > to.numBits)
+			return LLVMBuildTrunc(env.envBuilder, val, to.code, "intCast");
+		else if(from.kind == Kind.signed)	// NOTE: its about from.kind, and not to.kind
+			return LLVMBuildSExt(env.envBuilder, val, to.code, "intCast");
+		else
+			return LLVMBuildZExt(env.envBuilder, val, to.code, "intCast");
 	}
 
 	override Value valueUnary(Environment env, Tok op, Value lhs, Location loc)
 	{
-		if(op == Tok.Sub)
-			return new RValue(LLVMBuildNeg(env.envBuilder, lhs.eval(env), "neg"), this);	// TODO: promotions (unsigend neg doenst make sense)
-		else
+		if(op != Tok.Sub)
 			throw new CompileError("unsupported unary operator", loc);
+
+		final switch(kind)
+		{
+			case Kind.unsigned:
+			case Kind.signed:
+				return new RValue(LLVMBuildNeg(env.envBuilder, lhs.eval(env), "negInt"), this);
+			case Kind.floating:
+				return new RValue(LLVMBuildFNeg(env.envBuilder, lhs.eval(env), "negFp"), this);
+		}
+	}
+
+	// returns smallest type to which both a and b can be (implicitly) casted
+	static NumType commonType(NumType a, NumType b)
+	{
+		if(a.kind == b.kind)
+			return NumType(max(a.numBits, b.numBits), a.kind);
+		else if(a.kind < b.kind)
+			return NumType(max(a.numBits*2, b.numBits), b.kind);
+		else
+			return NumType(max(a.numBits, b.numBits*2), a.kind);
 	}
 
 	override Value valueBinary(Environment env, Tok op, Value lhs, Value rhs, Location loc)
 	{
-		auto typeA = this;	// == lhs.type
-		if(auto typeB = cast(IntType)rhs.type)
+		assert(lhs.type is this);
+		auto rhsType = cast(NumType)rhs.type;
+		if(rhsType is null)
+			throw new CompileError("cant do a binary with numeric and non-numeric value", loc);
+
+		NumType ty = commonType(this, rhsType);
+
+		auto a = numericCast(env, lhs.eval(env), this, ty);
+		auto b = numericCast(env, rhs.eval(env), rhsType, ty);
+
+		final switch(ty.kind)
 		{
-			IntType ty = IntType(max(typeA.numBits, typeB.numBits), typeA.signed && typeB.signed);	// implicit conversions small->large and signed->unsigned
-
-			auto a = lhs.implicitCast(env, ty, loc).eval(env);
-			auto b = rhs.implicitCast(env, ty, loc).eval(env);
-
-			switch(op)
+			case Kind.unsigned: switch(op)
 			{
+				case Tok.Add:	return new RValue(LLVMBuildAdd (env.envBuilder, a, b, "add"), ty);
+				case Tok.Sub:	return new RValue(LLVMBuildSub (env.envBuilder, a, b, "sub"), ty);
+				case Tok.Mul:	return new RValue(LLVMBuildMul (env.envBuilder, a, b, "mul"), ty);
+				case Tok.Div:	return new RValue(LLVMBuildUDiv(env.envBuilder, a, b, "div"), ty);
+				case Tok.Mod:	return new RValue(LLVMBuildURem(env.envBuilder, a, b, "mod"), ty);
+
 				case Tok.And:	return new RValue(LLVMBuildAnd (env.envBuilder, a, b, "and"), ty);
 				case Tok.Or:	return new RValue(LLVMBuildOr  (env.envBuilder, a, b, "or" ), ty);
 				case Tok.Xor:	return new RValue(LLVMBuildXor (env.envBuilder, a, b, "xor"), ty);
 				case Tok.Shl:	return new RValue(LLVMBuildShl (env.envBuilder, a, b, "shl"), ty);
-
-
-				case Tok.Add:	return new RValue(LLVMBuildAdd (env.envBuilder, a, b, "add"), ty);
-				case Tok.Sub:	return new RValue(LLVMBuildSub (env.envBuilder, a, b, "sub"), ty);
-				case Tok.Mul:	return new RValue(LLVMBuildMul (env.envBuilder, a, b, "mul"), ty);
-
-				case Tok.Equal:	return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.EQ,  a, b, "cmp"), BoolType());
-				case Tok.NotEqual:	return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.NE,  a, b, "cmp"), BoolType());
-
-				default: break;
-			}
-
-			if(ty.signed) switch(op)
-			{
-				case Tok.Shr:	return new RValue(LLVMBuildAShr(env.envBuilder, a, b, "shr"), ty);
-
-				case Tok.Div:	return new RValue(LLVMBuildSDiv(env.envBuilder, a, b, "div"), ty);
-				case Tok.Mod:	return new RValue(LLVMBuildSRem(env.envBuilder, a, b, "mod"), ty);
-
-				case Tok.Less:			return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.SLT, a, b, "cmp"), BoolType());
-				case Tok.LessEqual:	return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.SLE, a, b, "cmp"), BoolType());
-				case Tok.Greater:		return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.SGT, a, b, "cmp"), BoolType());
-				case Tok.GreaterEqual:	return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.SGE, a, b, "cmp"), BoolType());
-
-				default: break;
-			}
-			else switch(op)
-			{
 				case Tok.Shr:	return new RValue(LLVMBuildLShr(env.envBuilder, a, b, "shr"), ty);
-
-				case Tok.Div:	return new RValue(LLVMBuildUDiv(env.envBuilder, a, b, "div"), ty);
-				case Tok.Mod:	return new RValue(LLVMBuildURem(env.envBuilder, a, b, "mod"), ty);
 
 				case Tok.Less:			return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.ULT, a, b, "cmp"), BoolType());
 				case Tok.LessEqual:	return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.ULE, a, b, "cmp"), BoolType());
 				case Tok.Greater:		return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.UGT, a, b, "cmp"), BoolType());
 				case Tok.GreaterEqual:	return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.UGE, a, b, "cmp"), BoolType());
 
+				case Tok.Equal:	return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.EQ,  a, b, "cmp"), BoolType());
+				case Tok.NotEqual:	return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.NE,  a, b, "cmp"), BoolType());
+
 				default: break;
 			}
+			break;
 
-			if(ty is typeA)	// assignOp is only possible if resulting type is same as lhs type
+			case Kind.signed: switch(op)
 			{
-				switch(op)
-				{
-					case Tok.AndAssign:	LLVMBuildStore(env.envBuilder, LLVMBuildAnd (env.envBuilder, a, b, "and"), lhs.evalRef(env)); return lhs;
-					case Tok.OrAssign:		LLVMBuildStore(env.envBuilder, LLVMBuildOr  (env.envBuilder, a, b, "or" ), lhs.evalRef(env)); return lhs;
-					case Tok.XorAssign:	LLVMBuildStore(env.envBuilder, LLVMBuildXor (env.envBuilder, a, b, "xor"), lhs.evalRef(env)); return lhs;
-					case Tok.ShlAssign:	LLVMBuildStore(env.envBuilder, LLVMBuildShl (env.envBuilder, a, b, "shl"), lhs.evalRef(env)); return lhs;
+				case Tok.Add:	return new RValue(LLVMBuildAdd (env.envBuilder, a, b, "add"), ty);
+				case Tok.Sub:	return new RValue(LLVMBuildSub (env.envBuilder, a, b, "sub"), ty);
+				case Tok.Mul:	return new RValue(LLVMBuildMul (env.envBuilder, a, b, "mul"), ty);
+				case Tok.Div:	return new RValue(LLVMBuildSDiv(env.envBuilder, a, b, "div"), ty);
+				case Tok.Mod:	return new RValue(LLVMBuildSRem(env.envBuilder, a, b, "mod"), ty);
 
-					case Tok.AddAssign:	LLVMBuildStore(env.envBuilder, LLVMBuildAdd (env.envBuilder, a, b, "add"), lhs.evalRef(env)); return lhs;
-					case Tok.SubAssign:	LLVMBuildStore(env.envBuilder, LLVMBuildSub (env.envBuilder, a, b, "sub"), lhs.evalRef(env)); return lhs;
-					case Tok.MulAssign:	LLVMBuildStore(env.envBuilder, LLVMBuildMul (env.envBuilder, a, b, "mul"), lhs.evalRef(env)); return lhs;
+				case Tok.And:	return new RValue(LLVMBuildAnd (env.envBuilder, a, b, "and"), ty);
+				case Tok.Or:	return new RValue(LLVMBuildOr  (env.envBuilder, a, b, "or" ), ty);
+				case Tok.Xor:	return new RValue(LLVMBuildXor (env.envBuilder, a, b, "xor"), ty);
+				case Tok.Shl:	return new RValue(LLVMBuildShl (env.envBuilder, a, b, "shl"), ty);
+				case Tok.Shr:	return new RValue(LLVMBuildAShr(env.envBuilder, a, b, "shr"), ty);
 
-					default: break;
-				}
+				case Tok.Less:			return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.SLT, a, b, "cmp"), BoolType());
+				case Tok.LessEqual:	return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.SLE, a, b, "cmp"), BoolType());
+				case Tok.Greater:		return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.SGT, a, b, "cmp"), BoolType());
+				case Tok.GreaterEqual:	return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.SGE, a, b, "cmp"), BoolType());
 
-				if(ty.signed) switch(op)
-				{
-					case Tok.ShrAssign:	LLVMBuildStore(env.envBuilder, LLVMBuildAShr(env.envBuilder, a, b, "shr"), lhs.evalRef(env)); return lhs;
+				case Tok.Equal:	return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.EQ,  a, b, "cmp"), BoolType());
+				case Tok.NotEqual:	return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.NE,  a, b, "cmp"), BoolType());
 
-					case Tok.DivAssign:	LLVMBuildStore(env.envBuilder, LLVMBuildSDiv(env.envBuilder, a, b, "div"), lhs.evalRef(env)); return lhs;
-					case Tok.ModAssign:	LLVMBuildStore(env.envBuilder, LLVMBuildSRem(env.envBuilder, a, b, "mod"), lhs.evalRef(env)); return lhs;
-
-					default: break;
-				}
-				else switch(op)
-				{
-					case Tok.ShrAssign:	LLVMBuildStore(env.envBuilder, LLVMBuildLShr(env.envBuilder, a, b, "shr"), lhs.evalRef(env)); return lhs;
-
-					case Tok.DivAssign:	LLVMBuildStore(env.envBuilder, LLVMBuildUDiv(env.envBuilder, a, b, "div"), lhs.evalRef(env)); return lhs;
-					case Tok.ModAssign:	LLVMBuildStore(env.envBuilder, LLVMBuildURem(env.envBuilder, a, b, "mod"), lhs.evalRef(env)); return lhs;
-
-					default: break;
-				}
+				default: break;
 			}
+			break;
 
+			case Kind.floating: switch(op)
+			{
+				case Tok.Add:	return new RValue(LLVMBuildFAdd(env.envBuilder, a, b, "add"), ty);
+				case Tok.Sub:	return new RValue(LLVMBuildFSub(env.envBuilder, a, b, "sub"), ty);
+				case Tok.Mul:	return new RValue(LLVMBuildFMul(env.envBuilder, a, b, "mul"), ty);
+				case Tok.Div:	return new RValue(LLVMBuildFDiv(env.envBuilder, a, b, "div"), ty);
+				case Tok.Mod:	return new RValue(LLVMBuildFRem(env.envBuilder, a, b, "mod"), ty);
+
+				case Tok.Less:			return new RValue(LLVMBuildFCmp(env.envBuilder, LLVMRealPredicate.OLT, a, b, "cmp"), BoolType());
+				case Tok.LessEqual:	return new RValue(LLVMBuildFCmp(env.envBuilder, LLVMRealPredicate.OLE, a, b, "cmp"), BoolType());
+				case Tok.Greater:		return new RValue(LLVMBuildFCmp(env.envBuilder, LLVMRealPredicate.OGT, a, b, "cmp"), BoolType());
+				case Tok.GreaterEqual:	return new RValue(LLVMBuildFCmp(env.envBuilder, LLVMRealPredicate.OGE, a, b, "cmp"), BoolType());
+
+				case Tok.Equal:	return new RValue(LLVMBuildFCmp(env.envBuilder, LLVMRealPredicate.OEQ,  a, b, "cmp"), BoolType());
+				case Tok.NotEqual:	return new RValue(LLVMBuildFCmp(env.envBuilder, LLVMRealPredicate.ONE,  a, b, "cmp"), BoolType());
+
+				default: break;
+			}
+			break;
 		}
 
 		throw new CompileError("impossible binary operator", loc);
 	}
+
 }
-
-/// floating point types of various sizes
-final class FloatType : Type
-{
-	static FloatType float32, float64, float80, float128;
-
-	const uint numBits;
-	const string name;
-
-	static this()
-	{
-		float32 = new FloatType(LLVMFloatType(), 32, "float");
-		float64 = new FloatType(LLVMDoubleType(), 64, "double");
-		float80 = new FloatType(LLVMX86FP80Type(), 80, "real");
-		float128 = new FloatType(LLVMFP128Type(), 128, "quad");
-	}
-
-	static FloatType opCall(uint numBits)
-	{
-		if(numBits<=32)		return float32;
-		if(numBits<=64)		return float64;
-		if(numBits<=80)		return float80;
-		if(numBits<=128)	return float128;
-
-		assert(false, "float size overflow... kinda");
-	}
-
-	private this(LLVMTypeRef code, uint numBits, string name)
-	{
-		this.numBits = numBits;
-		this.name = name;
-		super(name, code);
-	}
-}
-
