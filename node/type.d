@@ -46,7 +46,7 @@ abstract class Type : Node
 		if(!LLVMIsConstant(val))
 			throw new CompileError("static array size has to be a compile-time constant", loc);
 
-		size_t size = LLVMConstIntGetZExtValue(val);
+		size_t size = cast(size_t)LLVMConstIntGetZExtValue(val);
 		if(size > 65536)	// kinda arbitrary limit... increase if you want (dont remove it though)
 			throw new CompileError("static array too large. Use a dynamic one", loc);
 
