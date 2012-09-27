@@ -31,6 +31,26 @@ abstract class Value : Node
 			return eval(env);
 	}
 
+	final T getKnown(T)(Environment env, Location loc)	// if it works out, env is not actually used (but passing null wont work currently)
+	{
+		static if(is(T == size_t))
+			auto type = NumType.size_t;
+		else static if(is(T==bool))
+			auto type = BoolType();
+		else static assert(false);
+
+		auto val = this.implicitCast(env, type, loc).eval(env);
+
+		// NOTE: LLVMIsConstant will return true for global addresses an such,
+		// which is actually not a 'known value' in our sense.
+		// Checking for NumOperands>0 (i.e. expressions) should trigger in most
+		// such erroneous cases, but maybe not all. But I can't find a clean way to do it.
+		if(!LLVMIsConstant(val) || LLVMGetNumOperands(val)>0)
+			throw new CompileError("expression cant be evaluated at compile time", loc);
+
+		return cast(T)LLVMConstIntGetZExtValue(val);	// zero-extension shouldn't matter, as it is truncated back to the exact type
+	}
+
 	final override Node binary(Environment env, Tok op, Node _rhs, Location loc)
 	{
 		auto rhs = cast(Value)_rhs;

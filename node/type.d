@@ -41,12 +41,7 @@ abstract class Type : Node
 		if(args.length != 1)
 			throw new CompileError("static arrays have to be 1-dimensional", loc);
 
-		auto val = args[0].asValue.implicitCast(env, NumType.size_t, loc).eval(env);
-
-		if(!LLVMIsConstant(val))
-			throw new CompileError("static array size has to be a compile-time constant", loc);
-
-		size_t size = cast(size_t)LLVMConstIntGetZExtValue(val);
+		size_t size = args[0].asValue.getKnown!size_t(env, loc);
 		if(size > 65536)	// kinda arbitrary limit... increase if you want (dont remove it though)
 			throw new CompileError("static array too large. Use a dynamic one", loc);
 
