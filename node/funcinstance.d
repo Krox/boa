@@ -383,6 +383,18 @@ final class Instance : Value, Environment
 			LLVMPositionBuilderAtEnd(builder, afterBB);
 		}
 
+		/// StaticIf statement
+		else if(auto ast = cast(StaticIfAst)_ast)
+		{
+			bool condition = genExpression(ast.expr, this).asValue.getKnown!bool(this, ast.loc);
+
+			if(condition)
+				genBlock(ast.thenBlock);
+			else if(ast.elseBlock !is null)
+				genBlock(ast.elseBlock);
+			//else do nothing
+		}
+
 		/// Assert statement
 		else if(auto  ast = cast(AssertAst)_ast)
 		{
@@ -400,6 +412,15 @@ final class Instance : Value, Environment
 			LLVMBuildUnreachable(builder);
 
 			LLVMPositionBuilderAtEnd(builder, afterBB);
+		}
+
+		/// StaticAssert statement
+		else if(auto  ast = cast(StaticAssertAst)_ast)
+		{
+			bool condition = genExpression(ast.expr, this).asValue.getKnown!bool(this, ast.loc);
+
+			if(condition == false)
+				throw new CompileError("static assert failed", ast.loc);
 		}
 
 		/// (local) variable

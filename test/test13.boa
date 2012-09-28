@@ -1,0 +1,13 @@
+// yes 42
+
+extern int main():
+	static assert true
+	static assert 1+2*3-5/2 == 5
+	//static assert size_t.sizeof < 42	// TODO: should work at some point
+
+	static if false:
+		return 1
+	else:
+		return 42
+
+	return 2

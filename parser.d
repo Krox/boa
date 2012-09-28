@@ -285,7 +285,10 @@ class parse
 			else
 				elseBlock = null;
 
-			return new IfAst(expr, thenBlock, elseBlock, loc);
+			if(flags & Attribute.Static)
+				return new StaticIfAst(expr, thenBlock, elseBlock, loc);
+			else
+				return new IfAst(expr, thenBlock, elseBlock, loc);
 		}
 
 		else if(ts.tryMatch(Tok.While))
@@ -318,7 +321,10 @@ class parse
 		{
 			auto expr = parseExpression();
 			ts.match(Tok.Semi);
-			return new AssertAst(expr, loc);
+			if(flags & Attribute.Static)
+				return new StaticAssertAst(expr, loc);
+			else
+				return new AssertAst(expr, loc);
 		}
 
 		else if(ts.peek(Tok.Struct) || ts.peek(Tok.Class))

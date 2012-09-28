@@ -13,6 +13,8 @@ private import std.algorithm : sort, SwapStrategy;
 		* Block             Statement[]
 		* Import
 		* Assert
+		* StaticIf
+		* StaticAssert
 		* Expression
 			* Literal
 			* Symbol
@@ -172,6 +174,33 @@ final class ImportAst : StatementAst
 }
 
 final class AssertAst : StatementAst
+{
+	ExpressionAst expr;
+
+	this(ExpressionAst expr, Location loc)
+	{
+		super(loc);
+		this.expr = expr;
+	}
+}
+
+final class StaticIfAst : ControlFlowAst
+{
+	ExpressionAst expr;
+	BlockAst thenBlock, elseBlock;	// else block might be null
+
+	this(ExpressionAst expr, BlockAst thenBlock, BlockAst elseBlock, Location loc)
+	{
+		super(loc);
+		if(thenBlock.terminal && elseBlock !is null && elseBlock.terminal)
+			terminal = true;
+		this.expr = expr;
+		this.thenBlock = thenBlock;
+		this.elseBlock = elseBlock;
+	}
+}
+
+final class StaticAssertAst : StatementAst
 {
 	ExpressionAst expr;
 
