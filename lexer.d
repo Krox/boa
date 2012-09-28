@@ -85,7 +85,7 @@ final class lex
 		"==": Tok.Equal,		"!=": Tok.NotEqual,		"<": Tok.Less,			">": Tok.Greater,		"<=": Tok.LessEqual,	">=": Tok.GreaterEqual,
 
 		"..": Tok.DotDot,		",": Tok.Comma,			";": Tok.Semi,			":": Tok.Colon,			".": Tok.Dot,			"::" : Tok.Cast,
-		"\\": Tok.Lambda,		"->": Tok.Map,
+		"\\": Tok.Lambda,		"->": Tok.Map,			"&&": Tok.AndAnd,		"||": Tok.OrOr,
 
 		"(": Tok.OpenParen,		")": Tok.CloseParen,
 		"[": Tok.OpenBracket,	"]": Tok.CloseBracket,

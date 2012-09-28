@@ -1,0 +1,36 @@
+// yes 31
+
+int r = 1
+
+bool foo(int x):
+	r = r + x
+	return false
+
+bool bar(int x):
+	r = r + x
+	return true
+
+extern int main():
+	// check non-insertion of control-flow when const
+	static assert true && true
+
+	// check laziness
+	if foo(10) && bar(100):		// second call should not be executed
+		return 999
+	if !(bar(20) || foo(100)):	// second call should not be executed
+		return 998
+
+	// check result values with control-flow
+	if foo(0) || foo(0):	return 100
+	if !(bar(0) && bar(0)): return 101
+
+	// check result without control-flow
+	if (true && true) != true: return 197
+	if (true && false) != false: return 196
+	if (false && true) != false: return 195
+	if (false && false) != false: return 194
+	if (true || true) != true: return 193
+	if (true || false) != true: return 192
+	if (false || true) != true: return 191
+	if (false || false) != false: return 190
+	return r

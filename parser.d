@@ -79,14 +79,15 @@ class parse
 		Tok.Less : 5, Tok.Greater : 5, Tok.LessEqual : 5, Tok.GreaterEqual : 5,
 		Tok.Equal : 6, Tok.NotEqual : 6,
 		Tok.And : 7, Tok.Xor : 8, Tok.Or : 9,
-		Tok.Assign : 10,
-		Tok.AddAssign : 10, Tok.SubAssign : 10, Tok.CatAssign : 10, Tok.MulAssign : 10, Tok.DivAssign : 10, Tok.ModAssign : 10,
-		Tok.OrAssign : 10, Tok.AndAssign : 10, Tok.XorAssign : 10,
-		Tok.Comma : 11, Tok.Map : 11,
+		Tok.AndAnd : 10, Tok.OrOr : 11,
+		Tok.Assign : 12,
+		Tok.AddAssign : 12, Tok.SubAssign : 12, Tok.CatAssign : 12, Tok.MulAssign : 12, Tok.DivAssign : 12, Tok.ModAssign : 12,
+		Tok.OrAssign : 12, Tok.AndAssign : 12, Tok.XorAssign : 12,
+		Tok.Comma : 13, Tok.Map : 13,
 		];
 	}
 
-	ExpressionAst parseExpression(int prec = 11)()
+	ExpressionAst parseExpression(int prec = 13)()
 	{
 		auto root = parseExpression!(prec-1)();
 		while(ts.peek(Tok.Operator) && precedence[ts.first.tok] == prec)
@@ -126,7 +127,7 @@ class parse
 			ts.match(Tok.CloseParen);
 		}
 		else
-			throw new CompileError("cannot parse expression", loc);
+			throw new CompileError("cannot parse expression. next Token: "~ts.first.toString, loc);
 
 
 		// postfix operators
@@ -137,7 +138,7 @@ class parse
 				ExpressionAst[] args;
 				while(!ts.tryMatch(Tok.CloseParen))
 				{
-					args ~= parseExpression!10();
+					args ~= parseExpression!12();
 					if(!ts.peek(Tok.CloseParen))
 						ts.match(Tok.Comma);
 				}
@@ -150,7 +151,7 @@ class parse
 				ExpressionAst[] args;
 				while(!ts.tryMatch(Tok.CloseBracket))
 				{
-					args ~= parseExpression!10();
+					args ~= parseExpression!12();
 					if(!ts.peek(Tok.CloseBracket))
 						ts.match(Tok.Comma);
 				}
@@ -178,7 +179,7 @@ class parse
 					}
 				}
 				else
-					args ~= parseExpression!10();	// TODO: this wont parse foo!int() correctly
+					args ~= parseExpression!12();	// TODO: this wont parse foo!int() correctly
 
 				r = new InstantiateAst(r, args);
 			}

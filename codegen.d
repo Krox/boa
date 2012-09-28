@@ -109,36 +109,77 @@ Node genExpression(ExpressionAst _ast, Environment env)	// env is for symbol-loo
 
 	else if(auto ast = cast(BinaryAst)_ast)
 	{
-		if(ast.op == Tok.Cast)
+		// handle the lazy boolean operators first
+		// TODO: needs some cleanup. Maybe as special-case of (yet to be implemented) lazy-select-operator
+		if(ast.op == Tok.AndAnd || ast.op == Tok.OrOr)
 		{
-			auto ty = genExpression(ast.lhs, env).asType;
-			auto val = genExpression(ast.rhs, env).asValue;
-			return val.explicitCast(env, ty, ast.loc);
-		}
+			auto cond = genExpression(ast.lhs, env).asValue.implicitCast(env, BoolType(), ast.loc).eval(env);
 
-		if(ast.op == Tok.Assign)
-		{
-			auto lhs = genExpression(ast.lhs, env).asValue;
-			auto rhs = genExpression(ast.rhs, env).asValue;
-			LLVMBuildStore(env.envBuilder, rhs.implicitCast(env, lhs.type, ast.loc).eval(env), lhs.evalRef(env));
-			return lhs;
+			if(LLVMIsAConstantInt(cond))	// if left side is constant, there is no need for control-flow
+			{
+				if(ast.op == Tok.AndAnd)
+					if(LLVMConstIntGetZExtValue(cond))
+						return genExpression(ast.rhs, env).asValue.implicitCast(env, BoolType(), ast.loc);
+					else
+						return builtins["false"];
+				else
+					if(LLVMConstIntGetZExtValue(cond))
+						return builtins["true"];
+					else
+						return genExpression(ast.rhs, env).asValue.implicitCast(env, BoolType(), ast.loc);
+			}
+
+			auto start = LLVMGetInsertBlock(env.envBuilder);
+			auto bb = LLVMInsertBasicBlock(start, "LazyAnd");
+			auto after = LLVMInsertBasicBlock(start, "LazyAnd_after");
+			LLVMMoveBasicBlockAfter(bb, start);
+			LLVMMoveBasicBlockAfter(after, bb);
+			if(ast.op == Tok.AndAnd)
+				LLVMBuildCondBr(env.envBuilder, cond, bb, after);
+			else
+				LLVMBuildCondBr(env.envBuilder, cond, after, bb);
+
+			LLVMPositionBuilderAtEnd(env.envBuilder, bb);
+			auto otherCode = genExpression(ast.rhs, env).asValue.implicitCast(env, BoolType(), ast.loc).eval(env);
+			LLVMBuildBr(env.envBuilder, after);
+
+			LLVMPositionBuilderAtEnd(env.envBuilder, after);
+			auto phi = LLVMBuildPhi(env.envBuilder, BoolType().code, "lazyAnd");
+			auto vals = [LLVMConstInt(LLVMInt1Type(), ast.op == Tok.OrOr, false), otherCode];
+			auto blocks = [start, bb];
+			LLVMAddIncoming(phi, vals.ptr, blocks.ptr, 2);
+			return new RValue(phi, BoolType());
 		}
 
 		auto a = genExpression(ast.lhs, env);
 		auto b = genExpression(ast.rhs, env);
 
-		if(ast.op == Tok.Comma)
-			return new Tuple([a, b]);
-
-		if(ast.op == Tok.Map)
+		switch(ast.op)
 		{
-			auto params =  array(map!((Type x){return FunctionType.Parameter(x, false);})(a.asTypes));
-			return FunctionType(b.asType, false, null, params);
-		}
+			case Tok.Cast:
+				return b.asValue.explicitCast(env, a.asType, ast.loc);
 
-		auto r = a.binary(env, ast.op, b, ast.loc);
-		assert(r !is null);
-		return r;
+
+			case Tok.Assign:
+			{
+				auto lhs = a.asValue;
+				auto rhs = b.asValue;
+				LLVMBuildStore(env.envBuilder, rhs.implicitCast(env, lhs.type, ast.loc).eval(env), lhs.evalRef(env));
+				return lhs;
+			}
+
+			case Tok.Comma:
+				return new Tuple([a, b]);
+
+			case Tok.Map:
+			{
+				auto params =  array(map!((Type x){return FunctionType.Parameter(x, false);})(a.asTypes));
+				return FunctionType(b.asType, false, null, params);
+			}
+
+			default:
+				return a.binary(env, ast.op, b, ast.loc);
+		}
 	}
 
 	else if(auto ast = cast(NewAst)_ast)

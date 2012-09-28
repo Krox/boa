@@ -15,7 +15,7 @@ struct Interval!(T):
 	bool empty(): from == to
 
 class Object:
-	&&void __vtable
+	& &void __vtable
 
 	String toString():
 		return "Object"

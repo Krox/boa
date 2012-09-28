@@ -390,11 +390,15 @@ void LLVMSetMetadata(LLVMValueRef Val, uint KindID, LLVMValueRef Node);
 
 /* Conversion functions. Return the input value if it is an instance of the
    specified class, otherwise NULL. See llvm::dyn_cast_or_null<>. */
-/*
-#define LLVM_DECLARE_VALUE_CAST(name) \
-  LLVMValueRef LLVMIsA##name(LLVMValueRef Val);
-LLVM_FOR_EACH_VALUE_SUBCLASS(LLVM_DECLARE_VALUE_CAST)
-*/
+// this list is not complete. There are more functions for other types
+LLVMValueRef LLVMIsAConstantAggregateZero(LLVMValueRef Val);
+LLVMValueRef LLVMIsAConstantArray(LLVMValueRef Val);
+LLVMValueRef LLVMIsAConstantFP(LLVMValueRef Val);
+LLVMValueRef LLVMIsAConstantInt(LLVMValueRef Val);
+LLVMValueRef LLVMIsAConstantPointerNull(LLVMValueRef Val);
+LLVMValueRef LLVMIsAConstantStruct(LLVMValueRef Val);
+LLVMValueRef LLVMIsAConstantVector(LLVMValueRef Val);
+
 
 /* Operations on Uses */
 LLVMUseRef LLVMGetFirstUse(LLVMValueRef Val);

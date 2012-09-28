@@ -45,6 +45,35 @@ final class BoolType : Type
 	{
 		super("bool", LLVMInt1Type());
 	}
+
+	override Value valueUnary(Environment env, Tok op, Value lhs, Location loc)
+	{
+		if(op == Tok.Bang)
+			return new RValue(LLVMBuildNot(env.envBuilder, lhs.eval(env), "not"), this);
+
+		throw new CompileError("unsupported unary operator on boolean value", loc);
+	}
+
+	override Value valueBinary(Environment env, Tok op, Value lhs, Value rhs, Location loc)
+	{
+		assert(lhs.type is this);
+
+		if(rhs.type is this)
+		{
+			auto a = lhs.eval(env);
+			auto b = rhs.eval(env);
+
+			switch(op)
+			{
+				case Tok.Equal:	return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.EQ,  a, b, "cmp"), BoolType());
+				case Tok.NotEqual:	return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.NE,  a, b, "cmp"), BoolType());
+
+				default: break;
+			}
+		}
+
+		throw new CompileError("impossible binary operator on boolean", loc);
+	}
 }
 
 final class CharType : Type
@@ -85,7 +114,6 @@ final class CharType : Type
 		throw new CompileError("impossible binary operator on char", loc);
 	}
 }
-
 
 /// integer and float types
 final class NumType : Type

@@ -33,7 +33,7 @@ enum Tok	// probably more to come here
 	AndAssign, XorAssign, OrAssign,			// &= ^= |=
 	Equal, NotEqual, Is, NotIs,				// == != is !is
 	Less, Greater, LessEqual, GreaterEqual,	// < > <= >=
-	Cast, Comma, Map,						// :: , ->
+	Cast, Comma, Map, AndAnd, OrOr,			// :: , ->
 
 	Paren		= 0x0400,
 	OpenParen, CloseParen,		// ( )
