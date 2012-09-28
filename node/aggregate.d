@@ -72,18 +72,22 @@ final class Aggregate : Type, Environment
 		Aggregate superType;
 		FunctionSet constructor;
 
+		LLVMValueRef innerInitCode;	// after generating
+
 		// only for classes, only valid after generating
 		LLVMValueRef[] vtable;
-		LLVMValueRef vtablePtrCode;	// this is a global constant which points to the vtable
-									// the vtable itself is a global constant which is created lateron in "generate()"
 
-		LLVMTypeRef innerCode;		// valid all the time, but it may be inclomplete before generate(). Not sure, if LLVM likes that in all places
+		LLVMTypeRef innerCode;			// valid all the time, but it may be inclomplete before generate(). Not sure, if LLVM likes that in all places
+		LLVMValueRef globalInnerInit;	// global (constant) variable which holds the (inner) init
 	}
 
 	override @property LLVMValueRef initCode()
 	{
-		generate();	// opaque-type zero doesnt work with llvm
-		return LLVMConstNull(this.code);
+		if(isClass)
+			return LLVMConstNull(this.code);
+
+		generate();
+		return innerInitCode;
 	}
 
 
@@ -105,17 +109,15 @@ final class Aggregate : Type, Environment
 		this.isClass = ast.isClass;
 		this.members = new SymbolTable;
 
-		if(isClass)
-		{
-			this.vtablePtrCode = LLVMAddGlobal(modCode, LLVMPointerType(LLVMInt8Type(),0), toStringz(name~"_vtablePtr"));
-			LLVMSetGlobalConstant(vtablePtrCode, true);
-		}
 
 		this.innerCode = LLVMStructCreateNamed(LLVMGetGlobalContext(), toStringz(name));
 		if(isClass)
 			super(name, LLVMPointerType(innerCode, 0));
 		else
 			super(name, innerCode);
+
+		this.globalInnerInit = LLVMAddGlobal(modCode, innerCode, toStringz(name~"_init"));
+		LLVMSetGlobalConstant(globalInnerInit, true);
 
 		todoList ~= &this.generate;
 	}
@@ -187,17 +189,17 @@ final class Aggregate : Type, Environment
 		if(superType !is null)
 			superType.generate();
 
-		// build the vtable
+		LLVMValueRef vt;
+		// build the vtable and init
 		if(isClass)
 		{
 			foreach(method; virtualMethods)
 				method.declare();	// make sure all functions which need vtable-indices have them
 			vtableLocked = true;
 
-			auto vt = LLVMAddGlobal(modCode, LLVMArrayType(LLVMPointerType(LLVMInt8Type(),0), cast(int)vtable.length), toStringz(name~"_vtable"));
+			vt = LLVMAddGlobal(modCode, LLVMArrayType(LLVMPointerType(LLVMInt8Type(),0), cast(int)vtable.length), toStringz(name~"_vtable"));
 			LLVMSetGlobalConstant(vt, true);
 			LLVMSetInitializer(vt, LLVMConstArray(LLVMPointerType(LLVMInt8Type(),0), vtable.ptr, cast(uint)vtable.length));
-			LLVMSetInitializer(vtablePtrCode, LLVMConstPointerCast(vt, LLVMPointerType(LLVMInt8Type(),0)));
 		}
 
 
@@ -210,6 +212,21 @@ final class Aggregate : Type, Environment
 		foreach(field; fields)
 			elemTypeCodes[field.id] = field.type.code;	// remember: field.id does not always start at 0
 		LLVMStructSetBody(innerCode, elemTypeCodes.ptr, cast(uint)elemTypeCodes.length, /*packed=*/false);
+
+		// build the innerInit
+		innerInitCode = LLVMConstNull(innerCode);
+		if(superType!is null)
+			innerInitCode = LLVMConstInsertValue(innerInitCode, superType.innerInitCode, [cast(uint)0].ptr, 1);
+		foreach(field; fields)
+			innerInitCode = LLVMConstInsertValue(innerInitCode, field.initCode, [cast(uint)field.id].ptr, 1);
+		if(isClass)
+		{
+			uint[] ind = null;
+			for(auto c = this; c !is null; c = c.superType)
+				ind ~= 0;
+			innerInitCode = LLVMConstInsertValue(innerInitCode, LLVMConstPointerCast(vt, LLVMPointerType(LLVMPointerType(LLVMInt8Type(),0),0)), ind.ptr, cast(int)ind.length);
+		}
+		LLVMSetInitializer(globalInnerInit, innerInitCode);
 	}
 
 	bool vtableLocked = false;	// this is just for an assert, no real functionality
@@ -255,11 +272,10 @@ final class Aggregate : Type, Environment
 		auto newCode = LLVMBuildMalloc(env.envBuilder, LLVMGetElementType(this.code), "newObject");
 		auto val = new RValue(newCode, this);
 
-		// set the hidden vtable pointer		// future: may want to do a full blit of some init structure
-		auto a = LLVMBuildBitCast(env.envBuilder, vtablePtrCode, LLVMPointerType(LLVMPointerType(LLVMPointerType(LLVMInt8Type(),0),0),0), "vtablePtr");
-		auto b = LLVMBuildLoad(env.envBuilder, a, "vtable");
-		auto location = LLVMBuildBitCast(env.envBuilder, newCode, LLVMPointerType(LLVMPointerType(LLVMPointerType(LLVMInt8Type(),0),0),0), "vtableLoc");	// this assumes that '__vtable' is the very first field
-		LLVMBuildStore(env.envBuilder, b, location);
+		// set the hidden vtable pointer
+		auto a = LLVMBuildPointerCast(env.envBuilder, globalInnerInit, this.code, "initPtr");
+		auto b = LLVMBuildLoad(env.envBuilder, a, "init");
+		LLVMBuildStore(env.envBuilder, b, newCode);
 
 		// call constructor
 		if(constructor !is null)

@@ -1,0 +1,18 @@
+// yes 20
+
+struct Foo:
+	int x = 3
+
+class Bar:
+	Foo foo
+	int y = 2+2
+
+	constructor():
+		foo.x = 3*foo.x
+		y = 2*y
+
+extern int main():
+	Foo foo
+	auto bar = new Bar
+
+	return foo.x + bar.y + bar.foo.x	// should be 3+8+9 = 20

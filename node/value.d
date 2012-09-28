@@ -421,6 +421,7 @@ final class Field : Value
 	VariableAst ast;
 	const int id;		/// index inside the struct from LLVM-perspective
 	private Type _type;	/// valid after generating
+	LLVMValueRef initCode;	/// valid after generating
 	Aggregate thisType;
 
 	final override const @property string toString() { return ast.ident; }
@@ -432,9 +433,6 @@ final class Field : Value
 		this.ast = ast;
 		this.id = id;
 		this.thisType = thisType;
-
-		if(this.ast.initExpr !is null)
-			throw new CompileError("member variables with init not implemented", this.ast.loc);
 	}
 
 	private int status = 0;			// 0/1/2
@@ -446,6 +444,13 @@ final class Field : Value
 		scope(exit)	status = 2;
 
 		_type = genExpression(ast.type, thisType).asType;
+		if(ast.initExpr is null)
+			initCode = _type.initCode;
+		else
+			initCode = genExpression(ast.initExpr, thisType).asValue.eval(thisType);
+
+		if(!LLVMIsConstant(initCode))
+			throw new CompileError("field initializer is not a constant", ast.loc);
 	}
 
 	override @property Type type()
