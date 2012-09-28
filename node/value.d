@@ -2,6 +2,7 @@ module node.value;
 
 private import node.node;
 private import llvm.Core;
+private import llvm.Target;
 private import misc;
 private import std.conv : to;
 private import codegen;

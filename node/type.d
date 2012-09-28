@@ -3,9 +3,11 @@ module node.type;
 private import node.node;
 private import node.aggregate;
 private import llvm.Core;
+private import llvm.Target;
 private import std.array : array, join;
 private import std.algorithm : map, min, max;
 private import misc;
+private import codegen;
 private import node.integer;
 private import node.value;
 
@@ -53,7 +55,7 @@ abstract class Type : Node
 	{
 		switch(field)
 		{
-			case "sizeof":		return new RValue(LLVMSizeOf(code), NumType.size_t);
+			case "sizeof":		return new RValue(NumType.size_t, LLVMABISizeOfType(targetData, this.code));
 			// missing: init, min/max for integers, inf/nan for floats
 			default: return null;
 		}

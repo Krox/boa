@@ -5,6 +5,7 @@ private import ast;
 private import symboltable;
 private import llvm.Core;
 private import llvm.transforms.Scalar;
+private import llvm.Target;
 private import std.string : toStringz;
 private import node.node;
 private import tokenstream;
@@ -28,6 +29,7 @@ LLVMPassManagerRef fpm;
 Node[string] builtins;
 LLVMBuilderRef dummyBuilder;	// does not point to a function, and is not actually used if everything goes fine
 void delegate() [] todoList;
+LLVMTargetDataRef targetData;	// target of the JIT (i.e. the current machine)
 
 // call this exactly once
 Module compile(string filename)	// may want to take several filenames in the future
@@ -60,8 +62,6 @@ Module compile(string filename)	// may want to take several filenames in the fut
 	builtins["null"] = nullValue;
 
 	assert(filename !is null);
-	assert(modCode is null, "only call compile once");
-	modCode = LLVMModuleCreateWithName(toStringz(filename));
 
 	fpm = LLVMCreateFunctionPassManagerForModule(modCode);
 	LLVMAddInstructionCombiningPass(fpm);

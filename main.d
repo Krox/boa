@@ -46,11 +46,25 @@ int main(string[] args)
 
 		auto filename = args[1];
 
+		// create llvm module (I think the name doesn't matter)
+		modCode = LLVMModuleCreateWithName(toStringz(filename));
+
+		// init native target (otherwise we can't create a JIT)
+		LLVMInitializeX86TargetInfo();
+		LLVMInitializeX86Target();
+		LLVMInitializeX86TargetMC();
+
+		// create the JIT itself
+		LLVMExecutionEngineRef ee = null;
+		char* err = null;
+		if(LLVMCreateJITCompilerForModule(&ee, modCode,2, &err))
+			throw new Exception("could not create an ExecutionEngine: " ~ to!string(err));
+
+		// info on the target machine
+		targetData = LLVMGetExecutionEngineTargetData(ee);
 
 		auto mainModule = compile(filename);
 
-		if(dump)
-			LLVMDumpModule(modCode);
 
 		if(LLVMVerifyModule(modCode, LLVMVerifierFailureAction.PrintMessage, null))
 		{
@@ -59,20 +73,8 @@ int main(string[] args)
 			return -4;
 		}
 
-		LLVMExecutionEngineRef ee = null;
-		char* err = null;
-
-		LLVMInitializeX86TargetInfo();
-		LLVMInitializeX86Target();
-		LLVMInitializeX86TargetMC();
-
-		//if(LLVMCreateInterpreterForModule(&ee, modCode, &err))
-		if(LLVMCreateJITCompilerForModule(&ee, modCode,2, &err))
-		{
-			writefln("could not create an ExecutionEngine");
-			writefln("%s", to!string(err));
-			return -2;
-		}
+		if(dump)
+			LLVMDumpModule(modCode);
 
 		foreach(Module m; Module.moduleCache)
 			if(m.constructor !is null)
