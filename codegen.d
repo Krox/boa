@@ -30,6 +30,7 @@ Node[string] builtins;
 LLVMBuilderRef dummyBuilder;	// does not point to a function, and is not actually used if everything goes fine
 void delegate() [] todoList;
 LLVMTargetDataRef targetData;	// target of the JIT (i.e. the current machine)
+Value nullValue, trueValue, falseValue;	// value of some builtin-literals
 
 // call this exactly once
 Module compile(string filename)	// may want to take several filenames in the future
@@ -54,12 +55,9 @@ Module compile(string filename)	// may want to take several filenames in the fut
 	builtins["double"] = NumType.f64;
 	builtins["real"] = NumType.f80;
 	builtins["quad"] = NumType.f128;
-	builtins["false"] = new RValue(LLVMConstInt(LLVMInt1Type(), 0, 0), BoolType());
-	builtins["true"] = new RValue(LLVMConstInt(LLVMInt1Type(), 1, 0), BoolType());
-
-	auto nullValue = new RValue(LLVMConstPointerNull(LLVMPointerType(LLVMInt8Type(),0)), PointerType(VoidType()));
-	nullValue.isGenericNull = true;
-	builtins["null"] = nullValue;
+	builtins["false"] = falseValue = new RValue(LLVMConstInt(LLVMInt1Type(), 0, 0), BoolType());
+	builtins["true"] = trueValue = new RValue(LLVMConstInt(LLVMInt1Type(), 1, 0), BoolType());
+	builtins["null"] = nullValue = new RValue(LLVMConstPointerNull(LLVMPointerType(LLVMInt8Type(),0)), PointerType(VoidType()));
 
 	assert(filename !is null);
 
@@ -121,10 +119,10 @@ Node genExpression(ExpressionAst _ast, Environment env)	// env is for symbol-loo
 					if(LLVMConstIntGetZExtValue(cond))
 						return genExpression(ast.rhs, env).asValue.implicitCast(env, BoolType(), ast.loc);
 					else
-						return builtins["false"];
+						return falseValue;
 				else
 					if(LLVMConstIntGetZExtValue(cond))
-						return builtins["true"];
+						return trueValue;
 					else
 						return genExpression(ast.rhs, env).asValue.implicitCast(env, BoolType(), ast.loc);
 			}

@@ -2,7 +2,6 @@ module node.value;
 
 private import node.node;
 private import llvm.Core;
-private import llvm.Target;
 private import misc;
 private import std.conv : to;
 private import codegen;
@@ -16,8 +15,6 @@ abstract class Value : Node
 	abstract LLVMValueRef eval(Environment env);
 	abstract LLVMValueRef evalRef(Environment env);
 	abstract @property Type type();
-
-	bool isGenericNull = false;	// only true for the "null"-value... kinda stupid implementation of null...
 
 	override @property string toString()
 	{
@@ -42,11 +39,7 @@ abstract class Value : Node
 
 		auto val = this.implicitCast(env, type, loc).eval(env);
 
-		// NOTE: LLVMIsConstant will return true for global addresses an such,
-		// which is actually not a 'known value' in our sense.
-		// Checking for NumOperands>0 (i.e. expressions) should trigger in most
-		// such erroneous cases, but maybe not all. But I can't find a clean way to do it.
-		if(!LLVMIsConstant(val) || LLVMGetNumOperands(val)>0)
+		if(LLVMIsAConstantInt(val) == null)	// NOTE: for llvm, bool is a kind of integer
 			throw new CompileError("expression cant be evaluated at compile time", loc);
 
 		return cast(T)LLVMConstIntGetZExtValue(val);	// zero-extension shouldn't matter, as it is truncated back to the exact type
@@ -122,7 +115,7 @@ abstract class Value : Node
 	// null if not possible
 	final Value tryCast(Environment env, Type destType, bool explicit)
 	{
-		// already right type: return it unaltered (NOTE: this is the only case a rvalue can come out of a cast)
+		// already right type: return it unaltered (NOTE: this is the only case a lvalue can come out of a cast)
 		if(this.type is destType)
 			return this;
 
@@ -131,7 +124,7 @@ abstract class Value : Node
 			return new RValue(null, destType);
 
 		// generic null -> any pointer
-		if(this.isGenericNull)
+		if(this is nullValue)
 			if(auto newTy = cast(PointerType)destType)
 				return new RValue(LLVMConstPointerNull(newTy.code), newTy);
 
@@ -375,7 +368,6 @@ final class GlobalVariable : Value
 
 	private void generate()
 	{
-		// TODO: "enclosing" might be a function, but expressions might not put code there of course (BUG)
 		if(status == 1)	throw new CompileError("cyclic definition of global variable", ast.loc);
 		if(status == 2)	return;
 		status = 1;
@@ -400,7 +392,7 @@ final class GlobalVariable : Value
 				throw new CompileError("global variable initializer not (compile-time) constant", ast.loc);
 		}
 		else
-			initCode = LLVMConstNull(_type.code);
+			initCode = _type.initCode;
 
 		//LLVMSetThreadLocal(code, true);	// I think you need some thread support before you can actually do this
 		LLVMSetInitializer(code, initCode);
