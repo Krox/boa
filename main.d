@@ -28,19 +28,46 @@ import core.memory;
 import std.getopt;
 import node.mod;
 
+extern(C)	// (part of) dlfcn.h translated to D
+{
+	void* dlopen(const char* file, int mode);
+	int dlclose (void* handle);
+	void* dlsym (void* handle, const char* name);
+	char* dlerror();
+
+	enum	// for the 'mode' parameter of dlopen
+	{
+		// exactly one of these is needed
+		RTLD_LAZY	= 0x00001,
+		RTLD_NOW	= 0x00002,
+
+		// combination of these is optional
+		RTLD_NOLOAD		= 0x00004,
+		RTLD_DEEPBIND	= 0x00008,
+		RTLD_GLOBAL		= 0x00100,
+		RTLD_LOCAL		= 0,
+		RTLD_NODELETE	= 0x01000,
+	}
+}
+
 int main(string[] args)
 {
 	GC.disable();
+
 	try
 	{
 		bool dump = false;
+		string[] libFilenames;
+
 		getopt(args, std.getopt.config.passThrough,
 				"dump", &dump,
-				"I", &Module.importPaths);
+				"I", &Module.importPaths,
+				"l", &libFilenames,
+				);
 
 		if(args.length != 2)
 		{
-			writefln("usage: boa filename");
+			writefln("usage: boa [options] filename");
 			return -1;
 		}
 
@@ -65,7 +92,6 @@ int main(string[] args)
 
 		auto mainModule = compile(filename);
 
-
 		if(LLVMVerifyModule(modCode, LLVMVerifierFailureAction.PrintMessage, null))
 		{
 			writefln("=== module dump ===");
@@ -76,10 +102,20 @@ int main(string[] args)
 		if(dump)
 			LLVMDumpModule(modCode);
 
+		// load libraries
+		foreach(lib; libFilenames)
+		{
+			dlopen(toStringz(lib), RTLD_LAZY | RTLD_GLOBAL);
+			if(auto str = dlerror())
+				throw new Exception(to!string(str));
+		}
+
+		// static module constructors
 		foreach(Module m; Module.moduleCache)
 			if(m.constructor !is null)
 				LLVMRunFunction(ee, m.constructor.eval(mainModule), 0, null);	// 'mainModule' is kind of a dummy here
 
+		// run main function. TODO: check the signature of "main"
 		LLVMValueRef mainCode;
 		if(LLVMFindFunction(ee, "main", &mainCode))
 			throw new Exception("cannot find main function");
