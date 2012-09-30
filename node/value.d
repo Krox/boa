@@ -92,7 +92,7 @@ abstract class Value : Node
 		return r;
 	}
 
-	// explicitly cast to another type, i.e. the '::' operator
+	// explicitly cast to another type
 	Value explicitCast(Environment env, Type destType, Location loc)
 	{
 		auto r = tryCast(env, destType, true);

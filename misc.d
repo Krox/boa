@@ -27,13 +27,13 @@ enum Tok	// probably more to come here
 	Operator	= 0x0300,
 	Add, Sub, Cat, Mul, Div, Mod,			// + - ~ * / %
 	Shl, Shr, And, Xor, Or, Bang,			// << >> & ^ | !
-	AddAssign, SubAssign, CatAssign,		// += -= ~= *= /= %=
+	AddAssign, SubAssign, CatAssign,		// += -= ~=
 	MulAssign, DivAssign, ModAssign,		// *= /= %=
 	Assign, ShlAssign, ShrAssign,			// = <<= >>=
 	AndAssign, XorAssign, OrAssign,			// &= ^= |=
 	Equal, NotEqual, Is, NotIs,				// == != is !is
 	Less, Greater, LessEqual, GreaterEqual,	// < > <= >=
-	Cast, Comma, Map, AndAnd, OrOr,			// :: , ->
+	Comma, Map, AndAnd, OrOr,				// , -> && ||
 
 	Paren		= 0x0400,
 	OpenParen, CloseParen,		// ( )
@@ -47,11 +47,10 @@ enum Tok	// probably more to come here
 	Return, For,In, While,Break,
 	If, Else, DotDot,
 	Semi, Colon,
-	Dot, Quest, Struct, Class,
+	Dot, Quest, Struct, Class, Cast,
 	Import, Module, Ref, New, Auto, Assert, Lambda, EndBlock, Line, File, Constructor, Destructor,
 
 	EOF			= 0xFF00,	// eof (end of sourcecode)
-
 }
 
 immutable class Location

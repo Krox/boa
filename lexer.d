@@ -62,7 +62,6 @@ final class lex
 		/// special tokens
 		"__EOF__" : Tok.EOF,	"__FILE__" : Tok.File,	"__LINE__" : Tok.Line,
 
-
 		"in" : Tok.In,
 		"struct" : Tok.Struct,
 		"class" : Tok.Class,
@@ -74,8 +73,7 @@ final class lex
 		"assert" : Tok.Assert,
 		"constructor" : Tok.Constructor,
 		"destructor" : Tok.Destructor,
-
-
+		"cast" : Tok.Cast,
 
 		"+": Tok.Add,			"-": Tok.Sub,			"~": Tok.Cat,			"*": Tok.Mul,			"/": Tok.Div,			"%": Tok.Mod,
 		"<<": Tok.Shl,			">>": Tok.Shr,			"&": Tok.And,			"^": Tok.Xor,			"|": Tok.Or,			"!": Tok.Bang,
@@ -84,7 +82,7 @@ final class lex
 		"=": Tok.Assign,
 		"==": Tok.Equal,		"!=": Tok.NotEqual,		"<": Tok.Less,			">": Tok.Greater,		"<=": Tok.LessEqual,	">=": Tok.GreaterEqual,
 
-		"..": Tok.DotDot,		",": Tok.Comma,			";": Tok.Semi,			":": Tok.Colon,			".": Tok.Dot,			"::" : Tok.Cast,
+		"..": Tok.DotDot,		",": Tok.Comma,			";": Tok.Semi,			":": Tok.Colon,			".": Tok.Dot,
 		"\\": Tok.Lambda,		"->": Tok.Map,			"&&": Tok.AndAnd,		"||": Tok.OrOr,
 
 		"(": Tok.OpenParen,		")": Tok.CloseParen,

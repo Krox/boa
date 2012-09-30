@@ -61,33 +61,49 @@ class parse
 	private static immutable int[Tok] precedence;
 	static this()
 	{
-		// postfix / *_cast / typeid
-		// prefix / new / delete / sizeof
-		// mul/div/mod
-		// add/sub/cat
-		// shift
-		// relational
-		// equality
-		// bitwise (staggered)
-		// logical
-		// assign (right-assoc)
+		// 0 : literal / symbol / parentheses
+		// 1 : postfix / prefix
+		// 2 : mul/div/mod
+		// 3 : add/sub/cat
+		// 4 : shift
+		// 5 : relational
+		// 6 : equality / identity
+		// 7,8,9 : bitwise
+		// 10,11 : logical
+		// 12 : map (right-assoc)
+		// 13 : assign (right-assoc)
+		// 14 : Comma
 		precedence = [
-		Tok.Cast : 1,
 		Tok.Mul : 2, Tok.Div : 2, Tok.Mod : 2,
 		Tok.Add : 3, Tok.Sub : 3, Tok.Cat : 3,
 		Tok.Shl : 4, Tok.Shr : 4,
 		Tok.Less : 5, Tok.Greater : 5, Tok.LessEqual : 5, Tok.GreaterEqual : 5,
-		Tok.Equal : 6, Tok.NotEqual : 6,
+		Tok.Equal : 6, Tok.NotEqual : 6, Tok.Is : 6, Tok.NotIs : 6,
 		Tok.And : 7, Tok.Xor : 8, Tok.Or : 9,
 		Tok.AndAnd : 10, Tok.OrOr : 11,
-		Tok.Assign : 12,
-		Tok.AddAssign : 12, Tok.SubAssign : 12, Tok.CatAssign : 12, Tok.MulAssign : 12, Tok.DivAssign : 12, Tok.ModAssign : 12,
-		Tok.OrAssign : 12, Tok.AndAssign : 12, Tok.XorAssign : 12,
-		Tok.Comma : 13, Tok.Map : 13,
+		Tok.Map : 12,
+		Tok.Assign : 13,
+		Tok.AddAssign : 13, Tok.SubAssign : 13, Tok.CatAssign : 13, Tok.MulAssign : 13, Tok.DivAssign : 13, Tok.ModAssign : 13,
+		Tok.ShlAssign : 13, Tok.ShrAssign : 13, Tok.AndAssign : 13, Tok.XorAssign : 13, Tok.OrAssign : 13,
+		Tok.Comma : 14,
 		];
 	}
 
-	ExpressionAst parseExpression(int prec = 13)()
+	ExpressionAst parseExpression(int prec = 14)()	// right-assoc binary operators
+		if(prec == 12 || prec == 13)
+	{
+		auto root = parseExpression!(prec-1)();
+		if(ts.peek(Tok.Operator) && precedence[ts.first.tok] == prec)
+		{
+			auto op = ts.match(Tok.Operator).tok;
+			auto next = parseExpression!(prec)();
+			root = new BinaryAst(op, root, next);
+		}
+		return root;
+	}
+
+	ExpressionAst parseExpression(int prec = 14)()	// left-assoc binary operators
+		if(2 <= prec && prec <= 11 || prec == 14)
 	{
 		auto root = parseExpression!(prec-1)();
 		while(ts.peek(Tok.Operator) && precedence[ts.first.tok] == prec)
@@ -99,36 +115,28 @@ class parse
 		return root;
 	}
 
-	ExpressionAst parseExpression(int prec : 0)()
+	ExpressionAst parseExpression(int prec = 14)()	// prefix and postfix operators
+		if(prec == 1)
 	{
 		auto loc = ts.currLoc;
 
 		if(ts.tryMatch(Tok.And))
-			return new UnaryAst(Tok.And, parseExpression!0(), loc);
+			return new UnaryAst(Tok.And, parseExpression!1(), loc);
 		else if(ts.tryMatch(Tok.Sub))
-			return new UnaryAst(Tok.Sub, parseExpression!0(), loc);
+			return new UnaryAst(Tok.Sub, parseExpression!1(), loc);
 		else if(ts.tryMatch(Tok.Bang))
-			return new UnaryAst(Tok.Bang, parseExpression!(0), loc);
+			return new UnaryAst(Tok.Bang, parseExpression!1(), loc);
 		else if(ts.tryMatch(Tok.New))
-			return new NewAst(parseExpression!0(), loc);
-
-
-		ExpressionAst r;
-
-		if(ts.tryMatch(Tok.Literal))		// literal
-			r = new LiteralAst(ts.lastValue, ts.lastTok, loc);
-
-		else if(ts.tryMatch(Tok.Ident))		// symbol
-			r = new SymbolAst(ts.lastValue, ts.lastLoc);
-
-		else if(ts.tryMatch(Tok.OpenParen))	// sub-expression with parens
+			return new NewAst(parseExpression!1(), loc);
+		else if(ts.tryMatch(Tok.Cast))
 		{
-			r = parseExpression();
-			ts.match(Tok.CloseParen);
+			auto ty = parseExpression!0();
+			auto val = parseExpression!1();
+			return new BinaryAst(Tok.Cast, ty, val);
 		}
-		else
-			throw new CompileError("cannot parse expression. next Token: "~ts.first.toString, loc);
 
+
+		ExpressionAst r = parseExpression!0();
 
 		// postfix operators
 		while(true)
@@ -173,13 +181,13 @@ class parse
 				{
 					while(!ts.tryMatch(Tok.CloseParen))
 					{
-						args ~= parseExpression();
+						args ~= parseExpression!12();
 						if(!ts.peek(Tok.CloseParen))
 							ts.match(Tok.Comma);
 					}
 				}
 				else
-					args ~= parseExpression!12();	// TODO: this wont parse foo!int() correctly
+					args ~= parseExpression!0();
 
 				r = new InstantiateAst(r, args);
 			}
@@ -189,6 +197,27 @@ class parse
 		}
 
 		return r;
+	}
+
+	ExpressionAst parseExpression(int prec = 14)()	// primary expression
+		if(prec == 0)
+	{
+		auto loc = ts.currLoc;
+
+		if(ts.tryMatch(Tok.Literal))			// literal
+			return new LiteralAst(ts.lastValue, ts.lastTok, loc);
+
+		else if(ts.tryMatch(Tok.Ident))		// symbol
+			return new SymbolAst(ts.lastValue, loc);
+
+		else if(ts.tryMatch(Tok.OpenParen))	// sub-expression with parens
+		{
+			auto r = parseExpression();
+			ts.match(Tok.CloseParen);
+			return r;
+		}
+		else
+			throw new CompileError("cannot parse primary expression at token: "~ts.first.toString, loc);
 	}
 
 	ParameterAst[] parseParameterList() /// parameter, not argument!
