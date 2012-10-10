@@ -65,6 +65,7 @@ final class lex
 		"in" : Tok.In,
 		"struct" : Tok.Struct,
 		"class" : Tok.Class,
+		"enum" : Tok.Enum,
 		"import" : Tok.Import,
 		"module" : Tok.Module,
 		"ref" : Tok.Ref,

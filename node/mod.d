@@ -9,6 +9,7 @@ private import node.value;
 private import codegen;
 private import misc;
 private import node.aggregate;
+private import node.enumeration;
 private import std.path : buildPath;
 private import lexer;
 private import parser;
@@ -57,6 +58,8 @@ final class Module : Node, Environment
 				symbols.add(ast.ident, new Aggregate(ast, this));
 			else
 				symbols.add(ast.ident, new AggregateSet(ast, this));
+		foreach(ast; modAst.enumDecls)
+			symbols.add(ast.ident, new Enum(ast, this));
 		foreach(astGroup; modAst.funcDecls)
 		{
 			auto fun = new FunctionSet(astGroup, this, null);

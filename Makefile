@@ -1,5 +1,5 @@
 
-modules = llvm/Core llvm/Analysis main ast misc base/array base/sequence lexer base/stack tokenstream parser node/aggregate node/func node/funcinstance node/integer node/meta node/node node/type node/value codegen symboltable literal node/mod
+modules = llvm/Core llvm/Analysis main ast misc base/array base/sequence lexer base/stack tokenstream parser node/aggregate node/func node/funcinstance node/integer node/meta node/node node/type node/value codegen symboltable literal node/mod node/enumeration
 objs = $(patsubst %, obj/%.o, $(modules))
 source = $(patsubst %, %.d, $(modules))
 

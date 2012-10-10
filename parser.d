@@ -385,6 +385,26 @@ class parse
 			return new AggregateAst(name, isClass, superClass, tempParams, decls, loc);
 		}
 
+		else if(ts.tryMatch(Tok.Enum))
+		{
+			string name = ts.match(Tok.Ident).value;
+			ts.match(Tok.Colon);
+
+			EnumOptionAst[] opts;
+			while(!ts.tryMatch(Tok.EndBlock))
+			{
+				auto l = ts.currLoc;
+				string ident = ts.match(Tok.Ident).value;
+				ExpressionAst expr = null;
+				if(ts.tryMatch(Tok.Assign))
+					expr = parseExpression();
+				ts.match(Tok.Semi);
+				opts ~= new EnumOptionAst(ident, expr, l);
+			}
+
+			return new EnumAst(name, opts, loc);
+		}
+
 		else if(ts.tryMatch(Tok.Import))
 		{
 			auto idents = parseDotIdents();

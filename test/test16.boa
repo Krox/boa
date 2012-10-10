@@ -1,0 +1,8 @@
+// yes 35
+
+enum E:
+	a; b=17
+	c
+
+extern int main():
+	return cast int E.a + cast int E.b + cast int E.c	// should be 0 + 17 + 18 = 35

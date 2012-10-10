@@ -8,6 +8,7 @@ private import std.algorithm : sort, SwapStrategy;
 * Ast
 	* Parameter             Type, expr
 	* TemplateParameter
+	* EnumOption			expr
 	* Module				DeclBlock
 	* Statement
 		* Block             Statement[]
@@ -29,6 +30,7 @@ private import std.algorithm : sort, SwapStrategy;
 				* Constructor
 				* Destructor
 			* Struct/Class  TemplateParameter[], DeclBlock
+			* Enum			EnumOption[]
 		* ControlFlow
 			* Return        Expression
 			* Break
@@ -63,7 +65,6 @@ final class ParameterAst : Ast
 		this.type = type;
 		this.name = name;
 		this.byRef = byRef;
-
 	}
 }
 
@@ -78,7 +79,20 @@ final class TemplateParameterAst : Ast
 	}
 }
 
-void sortDeclarations(DeclarationAst[] decls, ref FunctionAst[][] funcDecls, ref VariableAst[] varDecls, ref AggregateAst[] aggDecls)
+final class EnumOptionAst : Ast
+{
+	string ident;
+	ExpressionAst expr;	// might be null
+
+	this(string ident, ExpressionAst expr, Location loc)
+	{
+		super(loc);
+		this.ident = ident;
+		this.expr = expr;
+	}
+}
+
+void sortDeclarations(DeclarationAst[] decls, ref FunctionAst[][] funcDecls, ref VariableAst[] varDecls, ref AggregateAst[] aggDecls, ref EnumAst[] enumDecls)	// TODO: remove this function. bad style
 {
 	sort!("a.ident < b.ident", SwapStrategy.stable)(decls);
 
@@ -109,6 +123,12 @@ void sortDeclarations(DeclarationAst[] decls, ref FunctionAst[][] funcDecls, ref
 				throw new CompileError("cannot overload structs/classes", declGroup[1].loc);
 			aggDecls ~= ast;
 		}
+		else if(auto ast = cast(EnumAst)declGroup[0])
+		{
+			if(declGroup.length>1)
+				throw new CompileError("cannot overload enums", declGroup[1].loc);
+			enumDecls ~= ast;
+		}
 		else assert(false);
 	}
 }
@@ -121,6 +141,7 @@ final class ModuleAst : Ast
 	FunctionAst[][] funcDecls;
 	VariableAst[] varDecls;
 	AggregateAst[] aggDecls;
+	EnumAst[] enumDecls;
 
 	this(string name[], DeclarationAst[] decls, ImportAst[] imports, Location loc)
 	{
@@ -128,7 +149,7 @@ final class ModuleAst : Ast
 		this.name = name;
 		this.imports = imports;
 
-		sortDeclarations(decls, funcDecls, varDecls, aggDecls);
+		sortDeclarations(decls, funcDecls, varDecls, aggDecls, enumDecls);
 	}
 }
 
@@ -410,6 +431,7 @@ final class AggregateAst : DeclarationAst
 	FunctionAst[][] funcDecls;
 	VariableAst[] varDecls;
 	AggregateAst[] aggDecls;
+	EnumAst[] enumDecls;
 
 	this(string name, bool isClass, ExpressionAst superClass, TemplateParameterAst[] tempParams, DeclarationAst[] decls, Location loc)
 	{
@@ -433,7 +455,18 @@ final class AggregateAst : DeclarationAst
 
 		this.superClass = superClass;
 		this.tempParams = tempParams;
-		sortDeclarations(decls, funcDecls, varDecls, aggDecls);
+		sortDeclarations(decls, funcDecls, varDecls, aggDecls, enumDecls);
+	}
+}
+
+final class EnumAst : DeclarationAst
+{
+	EnumOptionAst[] opts;
+
+	this(string name, EnumOptionAst[] opts, Location loc)
+	{
+		super(name, loc);
+		this.opts = opts;
 	}
 }
 

@@ -174,6 +174,8 @@ final class Aggregate : Type, Environment
 
 		foreach(decl; ast.aggDecls)
 			throw new Exception("nested agg not supported");
+		foreach(decl; ast.enumDecls)
+			throw new Exception("nested enum not supported");
 	}
 
 	private int genStatus = 0;

@@ -9,6 +9,7 @@ private import ast;
 private import node.integer;
 private import node.type;
 private import node.aggregate;
+private import node.enumeration;
 
 abstract class Value : Node
 {
@@ -33,6 +34,8 @@ abstract class Value : Node
 	{
 		static if(is(T == size_t))
 			auto type = NumType.size_t;
+		else static if(is(T == int))
+			auto type = NumType.i32;
 		else static if(is(T==bool))
 			auto type = BoolType();
 		else static assert(false);
@@ -172,6 +175,11 @@ abstract class Value : Node
 
 					return new RValue(LLVMBuildIntToPtr(env.envBuilder, eval(env), newTy.code, "intToPtr"), newTy);
 				}
+
+		// enum -> int
+		if(auto oldTy = cast(Enum)this.type)
+			if(destType is NumType.i32)
+				return new RValue(eval(env), destType);
 
 		// ptr -> ptr
 		if(auto oldTy = cast(PointerType)this.type)
