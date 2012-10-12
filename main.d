@@ -1,11 +1,11 @@
 module main;
 
-import llvm.Core;
+private import llvm.Core;
 
 private import ast;
 private import std.stdio;
 private import llvm.transforms.IPO;
-private import std.stdio;
+private import std.string : toStringz;
 private import std.array : split;
 private import llvm.BitWriter;
 private import std.process : system;
@@ -14,19 +14,19 @@ private import misc;
 private import std.exception : assumeUnique;
 private import llvm.ExecutionEngine;
 
-import node.node;
-import std.conv;
-import std.getopt;
+private import std.conv;
+private import std.getopt;
 
-import core.memory;
-import base.stack;
-import lexer;
-import parser;
-import codegen;
-import llvm.Target;
-import core.memory;
-import std.getopt;
-import node.mod;
+private import core.memory;
+private import base.stack;
+private import lexer;
+private import parser;
+private import codegen;
+private import llvm.Target;
+private import core.memory;
+private import std.getopt;
+private import node.mod;
+private import node.type;
 
 extern(C)	// (part of) dlfcn.h translated to D
 {
@@ -90,7 +90,7 @@ int main(string[] args)
 		// info on the target machine
 		targetData = LLVMGetExecutionEngineTargetData(ee);
 
-		auto mainModule = compile(filename);
+		compile(filename);
 
 		if(LLVMVerifyModule(modCode, LLVMVerifierFailureAction.PrintMessage, null))
 		{
@@ -109,6 +109,10 @@ int main(string[] args)
 			if(auto str = dlerror())
 				throw new Exception(to!string(str));
 		}
+
+		// TypeInfo constructors
+		if(Type.typeInitFun !is null)
+			LLVMRunFunction(ee, Type.typeInitFun, 0, null);
 
 		// static module constructors
 		foreach(Module m; Module.moduleCache)

@@ -20,4 +20,11 @@ class Object:
 	String toString():
 		return "Object"
 
+class Type:
+	String name
 
+	override String toString():
+		return name
+
+	constructor!(T)():
+		this.name = T.stringof

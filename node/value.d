@@ -17,11 +17,6 @@ abstract class Value : Node
 	abstract LLVMValueRef evalRef(Environment env);
 	abstract @property Type type();
 
-	override @property string toString()
-	{
-		return "<some val>";	// TODO
-	}
-
 	final LLVMValueRef eval(Environment env, bool byRef)
 	{
 		if(byRef)
@@ -62,7 +57,7 @@ abstract class Value : Node
 		return this.type.valueUnary(env, op, this, loc);
 	}
 
-	final override Node index(Environment env, Node[] args, Location loc)
+	override Node index(Environment env, Node[] args, Location loc)
 	{
 		return this.type.valueIndex(env, this, args.asValues, loc);
 	}
@@ -72,7 +67,7 @@ abstract class Value : Node
 		return this.type.valueCall(env, this, args, thisPtr, loc);
 	}
 
-	final override Node lookup(Environment env, string ident)
+	override Node lookup(Environment env, string ident)
 	{
 		if(ident == "typeof")
 			return this.type;
@@ -211,6 +206,13 @@ abstract class Value : Node
 					return null;
 				return new RValue(LLVMBuildPointerCast(env.envBuilder, eval(env), newTy.code, "superCast"), newTy);
 			}
+
+		// class -> void-ptr
+		if(auto oldTy = cast(Aggregate)this.type)
+			if(oldTy.isClass)
+				if(auto newTy = cast(PointerType)destType)
+					if(newTy.base is VoidType())
+						return new RValue(LLVMBuildPointerCast(env.envBuilder, eval(env), newTy.code, "class2ptr"), newTy);
 
 		// no valid cast found
 		return null;

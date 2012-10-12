@@ -70,14 +70,14 @@ final class Aggregate : Type, Environment
 		FunctionSet[] virtualMethods;	// well-ordered
 		Field[] fields;					// well-ordered, only actual fields (i.e. no statics)
 		Aggregate superType;
-		FunctionSet constructor;
+		public FunctionSet constructor;
 
-		LLVMValueRef innerInitCode;	// after generating
+		public LLVMValueRef innerInitCode;	// after generating
 
 		// only for classes, only valid after generating
 		LLVMValueRef[] vtable;
 
-		LLVMTypeRef innerCode;			// valid all the time, but it may be inclomplete before generate(). Not sure, if LLVM likes that in all places
+		public LLVMTypeRef innerCode;			// valid all the time, but it may be inclomplete before generate(). Not sure, if LLVM likes that in all places
 		LLVMValueRef globalInnerInit;	// global (constant) variable which holds the (inner) init
 	}
 

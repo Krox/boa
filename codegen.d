@@ -31,9 +31,10 @@ LLVMBuilderRef dummyBuilder;	// does not point to a function, and is not actuall
 void delegate() [] todoList;
 LLVMTargetDataRef targetData;	// target of the JIT (i.e. the current machine)
 Value nullValue, trueValue, falseValue;	// value of some builtin-literals
+Module mainModule;
 
 // call this exactly once
-Module compile(string filename)	// may want to take several filenames in the future
+void compile(string filename)	// may want to take several filenames in the future
 {
 	dummyBuilder = LLVMCreateBuilder();
 	builtins["void"] = VoidType();
@@ -67,7 +68,8 @@ Module compile(string filename)	// may want to take several filenames in the fut
 	LLVMAddGVNPass(fpm);
 	LLVMAddCFGSimplificationPass(fpm);
 
-	auto mainModule = Module.get(filename);
+	assert(mainModule is null, "only call 'compile' once");
+	mainModule = Module.get(filename);
 
 	while(todoList.length > 0)
 	{
@@ -77,8 +79,6 @@ Module compile(string filename)	// may want to take several filenames in the fut
 		foreach(task; tmp)
 			task();
 	}
-
-	return mainModule;
 }
 
 Node genExpression(ExpressionAst _ast, Environment env)	// env is for symbol-lookups
@@ -92,10 +92,10 @@ Node genExpression(ExpressionAst _ast, Environment env)	// env is for symbol-loo
 
 		if(ast.op == Tok.And)
 		{
-			if(auto val = cast(Value)a)
-				return new RValue(val.evalRef(env), PointerType(val.type));
-			else if(auto type = cast(Type)a)
+			if(auto type = cast(Type)a)	// Type first, cause Type is a Value
 				return PointerType(type);
+			else if(auto val = cast(Value)a)
+				return new RValue(val.evalRef(env), PointerType(val.type));
 			else
 				throw new CompileError("unary '&' can only be used for values and types", ast.loc);
 		}
@@ -213,8 +213,11 @@ Node genExpression(ExpressionAst _ast, Environment env)	// env is for symbol-loo
 		assert(lhs !is null);
 
 		if(ast.field == "stringof")
-			throw new Exception("FIXME");
-			//return new RValue(env.envBuilder, lhs.toString());	// wrong, cause this would be char-ptr and not string
+		{
+			auto str = lhs.toString;
+			auto raw_string = new RValue(env.envBuilder, str);	// this is of type char-ptr
+			return enforce(env.lookupSymbol("String"), "no 'String' type found. check your std-library?").call(env, [new RValue(NumType.size_t, str.length), raw_string], null, new Location("<TODO>",0));
+		}
 
 		auto r = lhs.lookup(env, ast.field);
 		if(r is null)

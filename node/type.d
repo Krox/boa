@@ -14,7 +14,7 @@ private import node.value;
 /**
  NOTE: types are unique. therefore the constructors in here are private, and you cen check equality simply by comparing references
 */
-abstract class Type : Node
+abstract class Type : Value
 {
 	public const string name;
 	public LLVMTypeRef code;		// the LLVM type handle
@@ -105,6 +105,68 @@ abstract class Type : Node
 
 		auto newCode = LLVMBuildArrayMalloc(env.envBuilder, this.code, count.eval(env), "newArray");
 		return new RValue(newCode, PointerType(this));
+	}
+
+
+	//////////////////////////////////////////////////////////////////////
+	/// value semantics
+	//////////////////////////////////////////////////////////////////////
+
+	private LLVMValueRef globTypeInfo;	// created on demand. So maybe never for some types
+	private static Type _type;	// its always the 'Type' type, so it can be static
+	private static Type[] typesWithReflection;
+	public static LLVMValueRef typeInitFun;
+
+	final override LLVMValueRef eval(Environment _)	// dont use the Environment, its null
+	{
+		if(globTypeInfo is null)
+		{
+			globTypeInfo = LLVMAddGlobal(modCode, (cast(Aggregate)type).innerCode, toStringz(this.toString ~ "_typeinfo"));
+			todoList ~= &this.addToInitFunction;
+		}
+		return globTypeInfo;
+	}
+
+	final override LLVMValueRef evalRef(Environment env)
+	{
+		throw new Exception(this.toString ~ " is not a lvalue");
+	}
+
+	final override @property Type type()
+	{
+		if(_type is null)
+			_type = mainModule.lookupSymbol("Type").asType;
+		return _type;
+	}
+
+	private void addToInitFunction()
+	{
+		static LLVMBuilderRef builder;
+		static Environment env;
+
+		if(typeInitFun is null)	// first time? build the function itself
+		{
+			builder = LLVMCreateBuilder();
+			auto funType = LLVMFunctionType(LLVMVoidType(), null, 0, false);
+			typeInitFun = LLVMAddFunction(modCode, "typeInitFun", funType);
+			auto bb = LLVMAppendBasicBlock(typeInitFun, "entry");
+			LLVMPositionBuilderAtEnd(builder, bb);
+			auto tmp = LLVMBuildRetVoid(builder);
+			LLVMPositionBuilderBefore(builder, tmp);
+
+			env = new class Environment
+			{
+				@property LLVMBuilderRef envBuilder() { return builder; }
+				Node lookupSymbol(string ident) { return null; }
+				@property string envName() { return "typeInitFun"; }
+				@property Value envThisPtr() { return null; }
+			};
+		}
+
+		(cast(Aggregate)type).constructor.instantiate(env, [this]).call(env, [], new RValue(eval(null), type), new Location("builtin", 0));
+
+		(cast(Aggregate)type).generate();
+		LLVMSetInitializer(globTypeInfo, (cast(Aggregate)type).innerInitCode);
 	}
 }
 
