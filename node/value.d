@@ -11,11 +11,26 @@ private import node.type;
 private import node.aggregate;
 private import node.enumeration;
 
-abstract class Value : Node
+abstract class Value
 {
 	abstract LLVMValueRef eval(Environment env);
 	abstract LLVMValueRef evalRef(Environment env);
 	abstract @property Type type();
+
+	abstract @property string toString();	// used for .stringof, so make sure it gets overridden
+
+	final @property Type asType()
+	{
+		auto r = cast(Type)this;
+		if(r is null)
+			throw new CompileError(this.toString ~ " is not a type", null);
+		return r;
+	}
+
+	@property Type[] asTypes()
+	{
+		return [asType];
+	}
 
 	final LLVMValueRef eval(Environment env, bool byRef)
 	{
@@ -43,7 +58,7 @@ abstract class Value : Node
 		return cast(T)LLVMConstIntGetZExtValue(val);	// zero-extension shouldn't matter, as it is truncated back to the exact type
 	}
 
-	final override Node binary(Environment env, Tok op, Node _rhs, Location loc)
+	Value binary(Environment env, Tok op, Value _rhs, Location loc)
 	{
 		auto rhs = cast(Value)_rhs;
 		if(rhs is null)
@@ -52,22 +67,22 @@ abstract class Value : Node
 		return this.type.valueBinary(env, op, this, rhs, loc);
 	}
 
-	final override Node unary(Environment env, Tok op, Location loc)
+	Value unary(Environment env, Tok op, Location loc)
 	{
 		return this.type.valueUnary(env, op, this, loc);
 	}
 
-	override Node index(Environment env, Node[] args, Location loc)
+	Value index(Environment env, Value[] args, Location loc)
 	{
-		return this.type.valueIndex(env, this, args.asValues, loc);
+		return this.type.valueIndex(env, this, args, loc);
 	}
 
-	override Value call(Environment env, Value[] args, Value thisPtr, Location loc)
+	Value call(Environment env, Value[] args, Value thisPtr, Location loc)
 	{
 		return this.type.valueCall(env, this, args, thisPtr, loc);
 	}
 
-	override Node lookup(Environment env, string ident)
+	Value lookup(Environment env, string ident)
 	{
 		if(ident == "typeof")
 			return this.type;
@@ -75,9 +90,9 @@ abstract class Value : Node
 		return this.type.valueLookup(env, this, ident);
 	}
 
-	override Node instantiate(Environment env, Node[] args)	// null if not possible
+	Value instantiate(Environment env, Value[] args)	// null if not possible
 	{
-		return null;	// I dont see any case, where you can instantiate a value, but maybe I'm missing something
+		return null;
 	}
 
 	// implicitly cast to another type
@@ -216,6 +231,37 @@ abstract class Value : Node
 
 		// no valid cast found
 		return null;
+	}
+
+	Value addThis(Value thisPtr, Environment env)
+	{
+		return this;	// default behaviour is, that no thisptr is needed
+	}
+
+	final class Delegate : Value
+	{
+		private Value thisPtr;
+
+		override @property string toString()
+		{
+			return this.outer.toString;
+		}
+
+		this(Value thisPtr)
+		{
+			assert(null is cast(Delegate)this.outer, "nested delegates is probably not what you want");
+			assert(thisPtr !is null);
+			this.thisPtr = thisPtr;
+		}
+
+		override Value call(Environment env, Value[] args, Value unused_thisPtr, Location loc)
+		{
+			return this.outer.call(env, args, thisPtr, loc);
+		}
+
+		override LLVMValueRef eval(Environment env) { throw new Exception("<FIXME>"); }
+		override LLVMValueRef evalRef(Environment env) { throw new Exception("<FIXME>"); }
+		override @property Type type() { throw new Exception("<FIXME>"); }
 	}
 }
 
@@ -385,7 +431,7 @@ final class GlobalVariable : Value
 
 		Value initValue = null;
 		if(ast.initExpr !is null)
-			initValue = genExpression(ast.initExpr, enclosing).asValue;
+			initValue = genExpression(ast.initExpr, enclosing);
 
 		if(ast.type !is null)
 			this._type = genExpression(ast.type, enclosing).asType;
@@ -449,7 +495,7 @@ final class Field : Value
 		if(ast.initExpr is null)
 			initCode = _type.initCode;
 		else
-			initCode = genExpression(ast.initExpr, thisType).asValue.eval(thisType);
+			initCode = genExpression(ast.initExpr, thisType).eval(thisType);
 
 		if(!LLVMIsConstant(initCode))
 			throw new CompileError("field initializer is not a constant", ast.loc);

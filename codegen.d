@@ -26,7 +26,7 @@ private import node.mod;
 
 LLVMModuleRef modCode;
 LLVMPassManagerRef fpm;
-Node[string] builtins;
+Value[string] builtins;
 LLVMBuilderRef dummyBuilder;	// does not point to a function, and is not actually used if everything goes fine
 void delegate() [] todoList;
 LLVMTargetDataRef targetData;	// target of the JIT (i.e. the current machine)
@@ -81,7 +81,7 @@ void compile(string filename)	// may want to take several filenames in the futur
 	}
 }
 
-Node genExpression(ExpressionAst _ast, Environment env)	// env is for symbol-lookups
+Value genExpression(ExpressionAst _ast, Environment env)	// env is for symbol-lookups
 {
 	assert(env !is null);
 	assert(_ast !is null);
@@ -111,20 +111,20 @@ Node genExpression(ExpressionAst _ast, Environment env)	// env is for symbol-loo
 		// TODO: needs some cleanup. Maybe as special-case of (yet to be implemented) lazy-select-operator
 		if(ast.op == Tok.AndAnd || ast.op == Tok.OrOr)
 		{
-			auto cond = genExpression(ast.lhs, env).asValue.implicitCast(env, BoolType(), ast.loc).eval(env);
+			auto cond = genExpression(ast.lhs, env).implicitCast(env, BoolType(), ast.loc).eval(env);
 
 			if(LLVMIsAConstantInt(cond))	// if left side is constant, there is no need for control-flow
 			{
 				if(ast.op == Tok.AndAnd)
 					if(LLVMConstIntGetZExtValue(cond))
-						return genExpression(ast.rhs, env).asValue.implicitCast(env, BoolType(), ast.loc);
+						return genExpression(ast.rhs, env).implicitCast(env, BoolType(), ast.loc);
 					else
 						return falseValue;
 				else
 					if(LLVMConstIntGetZExtValue(cond))
 						return trueValue;
 					else
-						return genExpression(ast.rhs, env).asValue.implicitCast(env, BoolType(), ast.loc);
+						return genExpression(ast.rhs, env).implicitCast(env, BoolType(), ast.loc);
 			}
 
 			auto start = LLVMGetInsertBlock(env.envBuilder);
@@ -138,7 +138,7 @@ Node genExpression(ExpressionAst _ast, Environment env)	// env is for symbol-loo
 				LLVMBuildCondBr(env.envBuilder, cond, after, bb);
 
 			LLVMPositionBuilderAtEnd(env.envBuilder, bb);
-			auto otherCode = genExpression(ast.rhs, env).asValue.implicitCast(env, BoolType(), ast.loc).eval(env);
+			auto otherCode = genExpression(ast.rhs, env).implicitCast(env, BoolType(), ast.loc).eval(env);
 			LLVMBuildBr(env.envBuilder, after);
 
 			LLVMPositionBuilderAtEnd(env.envBuilder, after);
@@ -155,15 +155,12 @@ Node genExpression(ExpressionAst _ast, Environment env)	// env is for symbol-loo
 		switch(ast.op)
 		{
 			case Tok.Cast:
-				return b.asValue.explicitCast(env, a.asType, ast.loc);
-
+				return b.explicitCast(env, a.asType, ast.loc);
 
 			case Tok.Assign:
 			{
-				auto lhs = a.asValue;
-				auto rhs = b.asValue;
-				LLVMBuildStore(env.envBuilder, rhs.implicitCast(env, lhs.type, ast.loc).eval(env), lhs.evalRef(env));
-				return lhs;
+				LLVMBuildStore(env.envBuilder, b.implicitCast(env, a.type, ast.loc).eval(env), a.evalRef(env));
+				return a;
 			}
 
 			case Tok.Comma:
@@ -186,7 +183,7 @@ Node genExpression(ExpressionAst _ast, Environment env)	// env is for symbol-loo
 		{
 			if(index.args.length != 1)
 				throw new CompileError("only one-dimensional array allocation supported", ast.loc);
-			auto count = genExpression(index.args[0], env).asValue.implicitCast(env, NumType.size_t, ast.loc);
+			auto count = genExpression(index.args[0], env).implicitCast(env, NumType.size_t, ast.loc);
 			auto type = genExpression(index.lhs, env).asType;
 			return type.newArray(env, count);
 		}
@@ -195,7 +192,7 @@ Node genExpression(ExpressionAst _ast, Environment env)	// env is for symbol-loo
 			auto type = genExpression(call.lhs, env).asType;
 			auto args = new Value[call.args.length];
 			foreach(i; 0..args.length)
-				args[i] = genExpression(call.args[i], env).asValue;
+				args[i] = genExpression(call.args[i], env);
 			return type.newInstance(env, args, ast.loc);
 		}
 		else
@@ -228,7 +225,7 @@ Node genExpression(ExpressionAst _ast, Environment env)	// env is for symbol-loo
 	else if(auto ast = cast(InstantiateAst)_ast)
 	{
 		auto f = genExpression(ast.expr, env);
-		auto args = new Node[ast.args.length];
+		auto args = new Value[ast.args.length];
 		foreach(i; 0..args.length)
 			args[i] = genExpression(ast.args[i], env);
 		auto r = f.instantiate(env, args);
@@ -255,7 +252,7 @@ Node genExpression(ExpressionAst _ast, Environment env)	// env is for symbol-loo
 		auto f = genExpression(ast.lhs, env);
 		auto args = new Value[ast.args.length];
 		foreach(i; 0..args.length)
-			args[i] = genExpression(ast.args[i], env).asValue;
+			args[i] = genExpression(ast.args[i], env);
 		auto r = f.call(env, args, null, ast.loc);
 		assert(r !is null);
 		return r;
@@ -264,7 +261,7 @@ Node genExpression(ExpressionAst _ast, Environment env)	// env is for symbol-loo
 	else if(auto ast = cast(IndexAst)_ast)
 	{
 		auto f = genExpression(ast.lhs, env);
-		auto args = new Node[ast.args.length];
+		auto args = new Value[ast.args.length];
 		foreach(i; 0..args.length)
 			args[i] = genExpression(ast.args[i], env);
 		auto r = f.index(env, args, ast.loc);

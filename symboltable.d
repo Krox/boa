@@ -1,15 +1,15 @@
 module symboltable;
 
-private import node.node;
+private import node.value;
 private import base.stack;
 
 
 final class SymbolTable
 {
-	private Node[string] table;
+	private Value[string] table;
 
 	// null if not found
-	Node lookup(string ident)
+	Value lookup(string ident)
 	{
 		//return table.get(ident, null);	// doesnt compile for some reason
 		if(ident in table)
@@ -17,7 +17,7 @@ final class SymbolTable
 		return null;
 	}
 
-	void add(string ident, Node sym)
+	void add(string ident, Value sym)
 	{
 		if(ident in table)
 			throw new Exception("shadowing declaration: " ~ ident);
@@ -29,16 +29,16 @@ final class SymbolTable
 
 class LocalSymbolTable
 {
-	private Stack!(Node[string]) table;
+	private Stack!(Value[string]) table;
 
 	this()
 	{
-		table = new Stack!(Node[string]);
-		table.push((Node[string]).init);
+		table = new Stack!(Value[string]);
+		table.push((Value[string]).init);
 	}
 
 	// null if not found
-	final Node lookup(string name)
+	final Value lookup(string name)
 	{
 		assert(!table.isEmpty);
 		foreach(s; table)
@@ -47,7 +47,7 @@ class LocalSymbolTable
 		return null;	// not found
 	}
 
-	final void add(string name, Node sym)
+	final void add(string name, Value sym)
 	{
 		assert(!table.isEmpty);
 		foreach(s; table)
@@ -58,7 +58,7 @@ class LocalSymbolTable
 
 	final void push()
 	{
-		table.push((Node[string]).init);
+		table.push((Value[string]).init);
 	}
 
 	final void pop()

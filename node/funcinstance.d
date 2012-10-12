@@ -213,7 +213,7 @@ final class Instance : Value, Environment
 		return builder;
 	}
 
-	Node lookupSymbol(string ident)
+	Value lookupSymbol(string ident)
 	{
 		if(auto r = locals.lookup(ident))	// locals
 			return r;
@@ -262,7 +262,7 @@ final class Instance : Value, Environment
 
 			Value retValue;
 			if(ast.expr !is null)	// evaluate the expression ( even if the function returns void! )
-				retValue = genExpression(ast.expr, this).asValue.implicitCast(this, funType.retType, ast.loc);
+				retValue = genExpression(ast.expr, this).implicitCast(this, funType.retType, ast.loc);
 
 			if(funType.retType is VoidType())
 				LLVMBuildRetVoid(builder);
@@ -288,7 +288,7 @@ final class Instance : Value, Environment
 			LLVMBuildBr(builder, condBB);
 
 			LLVMPositionBuilderAtEnd(builder, condBB);
-			auto val = genExpression(ast.expr, this).asValue.eval(this);
+			auto val = genExpression(ast.expr, this).eval(this);
 			LLVMBuildCondBr(builder, val, whileBB, afterBB);
 
 			LLVMPositionBuilderAtEnd(builder, whileBB);
@@ -315,7 +315,7 @@ final class Instance : Value, Environment
 			locals.push();
 
 			// get us the range
-			auto rangeInit = genExpression(ast.range, this).asValue;
+			auto rangeInit = genExpression(ast.range, this);
 			auto range = new LValue(LLVMBuildAlloca(builder, rangeInit.type.code, "for_range"), rangeInit.type);
 			LLVMBuildStore(builder, rangeInit.eval(this), range.evalRef(this));
 
@@ -364,7 +364,7 @@ final class Instance : Value, Environment
 			if(elseBB is null)
 				elseBB = afterBB;
 
-			auto condCode = genExpression(ast.expr, this).asValue.implicitCast(this, BoolType(), ast.loc).eval(this);
+			auto condCode = genExpression(ast.expr, this).implicitCast(this, BoolType(), ast.loc).eval(this);
 			LLVMBuildCondBr(builder, condCode, thenBB, elseBB);
 
 			LLVMPositionBuilderAtEnd(builder, thenBB);
@@ -386,7 +386,7 @@ final class Instance : Value, Environment
 		/// StaticIf statement
 		else if(auto ast = cast(StaticIfAst)_ast)
 		{
-			bool condition = genExpression(ast.expr, this).asValue.getKnown!bool(this, ast.loc);
+			bool condition = genExpression(ast.expr, this).getKnown!bool(this, ast.loc);
 
 			if(condition)
 				genBlock(ast.thenBlock);
@@ -403,7 +403,7 @@ final class Instance : Value, Environment
 			auto triggerBB = LLVMAppendBasicBlock(funCode, "assert_trigger");
 			auto afterBB = LLVMAppendBasicBlock(funCode, "afterAssert");
 
-			auto condCode = genExpression(ast.expr, this).asValue.implicitCast(this, BoolType(), ast.loc).eval(this);
+			auto condCode = genExpression(ast.expr, this).implicitCast(this, BoolType(), ast.loc).eval(this);
 			LLVMBuildCondBr(builder, condCode, afterBB, triggerBB);
 
 			LLVMPositionBuilderAtEnd(builder, triggerBB);
@@ -417,7 +417,7 @@ final class Instance : Value, Environment
 		/// StaticAssert statement
 		else if(auto  ast = cast(StaticAssertAst)_ast)
 		{
-			bool condition = genExpression(ast.expr, this).asValue.getKnown!bool(this, ast.loc);
+			bool condition = genExpression(ast.expr, this).getKnown!bool(this, ast.loc);
 
 			if(condition == false)
 				throw new CompileError("static assert failed", ast.loc);
@@ -428,7 +428,7 @@ final class Instance : Value, Environment
 		{
 			Value initValue = null;
 			if(ast.initExpr !is null)
-				initValue = genExpression(ast.initExpr, this).asValue;
+				initValue = genExpression(ast.initExpr, this);
 
 			Type type;
 			if(ast.type !is null)

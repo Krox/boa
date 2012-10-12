@@ -14,8 +14,9 @@ private import std.path : buildPath;
 private import lexer;
 private import parser;
 private import std.exception : assumeUnique;
+private import node.type;
 
-final class Module : Node, Environment
+final class Module : Value, Environment
 {
 	private string[] idents;
 	const string fullName;
@@ -75,12 +76,12 @@ final class Module : Node, Environment
 		return dummyBuilder;
 	}
 
-	final Node lookupSymbol(string ident)
+	final Value lookupSymbol(string ident)
 	{
 		if(auto r = symbols.lookup(ident))
 			return r;
 
-		Node r = null;
+		Value r = null;
 		foreach(other; imports)
 		{
 			assert(other !is null && other.symbols !is null);
@@ -155,5 +156,14 @@ final class Module : Node, Environment
 			throw new CompileError("module with inconsistent name imported. Check the 'module' statement", mod.modAst.loc);
 		return mod;
 	}
+
+
+	//////////////////////////////////////////////////////////////////////
+	/// value semantics (stubs for now)
+	//////////////////////////////////////////////////////////////////////
+
+	override LLVMValueRef eval(Environment env) { throw new Exception("Module is not usable as value."); }
+	override LLVMValueRef evalRef(Environment env) { throw new Exception("Module is not usable as value."); }
+	override @property Type type() { throw new Exception("Module is not usable as value."); }
 }
 

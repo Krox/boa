@@ -11,7 +11,7 @@ private import node.type;
 
 // we dont consider any implicit casts in here, only exact matches
 // return null if impossible or ambiguous (or this function is simply not smart enough)
-Node[] deduceTemplateParameters(string[] tempParams, ExpressionAst[] paramTypes, Type[] argTypes, Environment env)
+Value[] deduceTemplateParameters(string[] tempParams, ExpressionAst[] paramTypes, Type[] argTypes, Environment env)
 {
 	assert(paramTypes.length == argTypes.length);
 
@@ -23,7 +23,7 @@ Node[] deduceTemplateParameters(string[] tempParams, ExpressionAst[] paramTypes,
 		return -1;
 	}
 
-	auto r = new Node[tempParams.length];
+	auto r = new Value[tempParams.length];
 
 	bool match(ExpressionAst ast, Type type)
 	{

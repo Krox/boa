@@ -18,7 +18,7 @@ private import node.aggregate;
 
 // TODO: force super() call in constructors
 
-private final class Virt : Node
+private final class Virt : Value
 {
 	FunctionSet outer;	// TODO: make it a nested class
 
@@ -32,7 +32,7 @@ private final class Virt : Node
 		return outer.name;	// in a dynamic sense, this is not right
 	}
 
-	final override Node addThis(Value thisPtr, Environment env)
+	final override Value addThis(Value thisPtr, Environment env)
 	{
 		return new Delegate(thisPtr);
 	}
@@ -51,6 +51,14 @@ private final class Virt : Node
 		auto fpp = LLVMBuildGEP(env.envBuilder, vtablePtr, [LLVMConstInt(LLVMInt32Type(), inst.vtableIndex, false)].ptr, 1, "funPtrPtr");
 		return (new LValue(fpp, inst.type)).call(env, args, thisPtr, loc);
 	}
+
+	//////////////////////////////////////////////////////////////////////
+	/// value semantics
+	//////////////////////////////////////////////////////////////////////
+
+	override LLVMValueRef eval(Environment env) { return outer.eval(env); }
+	override LLVMValueRef evalRef(Environment env) { return outer.evalRef(env); }
+	override @property Type type() { return outer.type(); }
 }
 
 private final class Template
@@ -67,7 +75,7 @@ private final class Template
 		assert(ast.tempParams !is null);
 	}
 
-	Instance instantiate(Environment env, Node[] args)	// returns null if not possible
+	Instance instantiate(Environment env, Value[] args)	// returns null if not possible
 	{
 		if(args.length != ast.tempParams.length)
 			throw new Exception("template parameter list length mismatch");
@@ -222,7 +230,7 @@ final class FunctionSet : Value
 	/// operations
 	//////////////////////////////////////////////////////////////////////
 
-	final override Node addThis(Value thisPtr, Environment env)
+	final override Value addThis(Value thisPtr, Environment env)
 	{
 		if(hasThis)
 			return new Delegate(thisPtr);
@@ -258,7 +266,7 @@ final class FunctionSet : Value
 		}
 	}
 
-	override Node instantiate(Environment env, Node[] args)	// null if not possible
+	override Value instantiate(Environment env, Value[] args)	// null if not possible
 	{
 		if(templates.length == 0)
 			throw new Exception(name ~ " is not a template");
@@ -276,7 +284,7 @@ final class FunctionSet : Value
 
 	private Virt virt;
 
-	final Node virtualize()
+	final Value virtualize()
 	{
 		if(!isVirtual)	// actually there may be more cases where virtualization isnt needed
 			return this;

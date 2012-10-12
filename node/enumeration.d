@@ -57,7 +57,7 @@ final class Enum : Type
 		foreach(opt; ast.opts)
 		{
 			if(opt.expr !is null)
-				curr = genExpression(opt.expr, enclosing).asValue.implicitCast(enclosing, NumType.i32, opt.loc).getKnown!int(enclosing, opt.loc);
+				curr = genExpression(opt.expr, enclosing).implicitCast(enclosing, NumType.i32, opt.loc).getKnown!int(enclosing, opt.loc);
 
 			if(opt.ident in options)
 				throw new CompileError("two enum options with the same name", opt.loc);
@@ -72,7 +72,7 @@ final class Enum : Type
 	/// operations
 	//////////////////////////////////////////////////////////////////////
 
-	final override Node lookup(Environment env, string ident)	// might return null
+	final override Value lookup(Environment env, string ident)	// might return null
 	{
 		generate();
 

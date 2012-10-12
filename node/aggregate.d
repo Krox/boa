@@ -13,7 +13,7 @@ private import node.value;
 private import node.type;
 private import node.meta;
 
-final class AggregateSet : Node
+final class AggregateSet : Value
 {
 	private
 	{
@@ -35,7 +35,7 @@ final class AggregateSet : Node
 		this.name = enclosing.envName() ~ "." ~ ast.ident;
 	}
 
-	override Aggregate instantiate(Environment env, Node[] args)	// null if not possible
+	override Aggregate instantiate(Environment env, Value[] args)	// null if not possible
 	{
 		if(args.length != ast.tempParams.length)
 			throw new Exception("template parameter list length mismatch");
@@ -51,6 +51,15 @@ final class AggregateSet : Node
 		instances[code] = agg;
 		return agg;
 	}
+
+
+	//////////////////////////////////////////////////////////////////////
+	/// value semantics (stubs for now)
+	//////////////////////////////////////////////////////////////////////
+
+	override LLVMValueRef eval(Environment env) { throw new Exception("templated Aggregate is not usable as value."); }
+	override LLVMValueRef evalRef(Environment env) { throw new Exception("templated Aggregate is not usable as value."); }
+	override @property Type type() { throw new Exception("templated Aggregate is not usable as value."); }
 }
 
 final class Aggregate : Type, Environment
@@ -252,7 +261,7 @@ final class Aggregate : Type, Environment
 	/// operations
 	//////////////////////////////////////////////////////////////////////
 
-	final override Node lookup(Environment env, string ident)	// might return null
+	final override Value lookup(Environment env, string ident)	// might return null
 	{
 		declare();
 		auto member = members.lookup(ident);
@@ -290,7 +299,7 @@ final class Aggregate : Type, Environment
 		return val;
 	}
 
-	override Node valueLookup(Environment env, Value lhs, string ident)
+	override Value valueLookup(Environment env, Value lhs, string ident)
 	{
 		if(auto r = this.lookup(env, ident))
 		{
@@ -368,7 +377,7 @@ final class Aggregate : Type, Environment
 		return dummyBuilder;
 	}
 
-	Node lookupSymbol(string ident)
+	Value lookupSymbol(string ident)
 	{
 		auto r = lookup(this, ident);
 		if(r !is null)

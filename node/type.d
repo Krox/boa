@@ -38,12 +38,12 @@ abstract class Type : Value
 		return name;
 	}
 
-	override Node index(Environment env, Node[] args, Location loc)
+	override Value index(Environment env, Value[] args, Location loc)
 	{
 		if(args.length != 1)
 			throw new CompileError("static arrays have to be 1-dimensional", loc);
 
-		size_t size = args[0].asValue.getKnown!size_t(env, loc);
+		size_t size = args[0].getKnown!size_t(env, loc);
 		if(size > 65536)	// kinda arbitrary limit... increase if you want (dont remove it though)
 			throw new CompileError("static array too large. Use a dynamic one", loc);
 
@@ -51,7 +51,7 @@ abstract class Type : Value
 	}
 
 	/// implementing some generic properties like .sizeof
-	override Node lookup(Environment env, string field)	// null if not found
+	override Value lookup(Environment env, string field)	// null if not found
 	{
 		switch(field)
 		{
@@ -79,7 +79,7 @@ abstract class Type : Value
 		throw new CompileError("unsupported valueIndex on type "~this.toString, loc);
 	}
 
-	Node valueLookup(Environment env, Value lhs, string ident)
+	Value valueLookup(Environment env, Value lhs, string ident)
 	{
 		assert(lhs.type is this);
 		return null;
@@ -157,7 +157,7 @@ abstract class Type : Value
 			env = new class Environment
 			{
 				@property LLVMBuilderRef envBuilder() { return builder; }
-				Node lookupSymbol(string ident) { return null; }
+				Value lookupSymbol(string ident) { return null; }
 				@property string envName() { return "typeInitFun"; }
 				@property Value envThisPtr() { return null; }
 			};
@@ -208,7 +208,7 @@ final class PointerType : Type
 		return new LValue(memberVal, base);
 	}
 
-	override Node valueLookup(Environment env, Value lhs, string ident)
+	override Value valueLookup(Environment env, Value lhs, string ident)
 	{
 		auto d = new LValue(lhs.eval(env), base);
 		return d.lookup(env, ident);
