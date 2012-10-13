@@ -46,33 +46,32 @@ final class BoolType : Type
 		super("bool", LLVMInt1Type());
 	}
 
-	override Value valueUnary(Environment env, Tok op, Value lhs, Location loc)
+	static Value buildUnary(Environment env, Tok op, LLVMValueRef val, Location loc)
 	{
-		if(op == Tok.Bang)
-			return new RValue(LLVMBuildNot(env.envBuilder, lhs.eval(env), "not"), this);
-
-		throw new CompileError("unsupported unary operator on boolean value", loc);
+		switch(op)
+		{
+			case Tok.Bang:
+			case Tok.Cat:
+				return new RValue(LLVMBuildNot(env.envBuilder, val, "not"), BoolType());
+			default:
+				throw new CompileError("unknown unary operator on bool", loc);
+		}
 	}
 
-	override Value valueBinary(Environment env, Tok op, Value lhs, Value rhs, Location loc)
+	// both operands have to be of bool type. Return is as well
+	static Value buildBinary(Environment env, Tok op, LLVMValueRef a, LLVMValueRef b, Location loc)
 	{
-		assert(lhs.type is this);
-
-		if(rhs.type is this)
+		switch(op)
 		{
-			auto a = lhs.eval(env);
-			auto b = rhs.eval(env);
+			case Tok.And:	return new RValue(LLVMBuildAnd (env.envBuilder, a, b, "and"), BoolType());
+			case Tok.Or:	return new RValue(LLVMBuildOr  (env.envBuilder, a, b, "or" ), BoolType());
+			case Tok.Xor:	return new RValue(LLVMBuildXor (env.envBuilder, a, b, "xor"), BoolType());
 
-			switch(op)
-			{
-				case Tok.Equal:	return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.EQ,  a, b, "cmp"), BoolType());
-				case Tok.NotEqual:	return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.NE,  a, b, "cmp"), BoolType());
+			case Tok.Equal:	return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.EQ,  a, b, "cmp"), BoolType());
+			case Tok.NotEqual:	return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.NE,  a, b, "cmp"), BoolType());
 
-				default: break;
-			}
+			default: throw new CompileError("impossible binary operator on boolean", loc);
 		}
-
-		throw new CompileError("impossible binary operator on boolean", loc);
 	}
 }
 
@@ -95,23 +94,15 @@ final class CharType : Type
 		super("char", LLVMInt8Type());	// in some future i want this to be a UTF32 character... or maybe not
 	}
 
-	override Value valueBinary(Environment env, Tok op, Value lhs, Value rhs, Location loc)
+	static Value buildBinary(Environment env, Tok op, LLVMValueRef a, LLVMValueRef b, Location loc)
 	{
-		if(rhs.type is CharType())
+		switch(op)
 		{
-			auto a = lhs.eval(env);
-			auto b = rhs.eval(env);
+			case Tok.Equal:	return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.EQ,  a, b, "cmp"), BoolType());
+			case Tok.NotEqual:	return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.NE,  a, b, "cmp"), BoolType());
 
-			switch(op)
-			{
-				case Tok.Equal:	return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.EQ,  a, b, "cmp"), BoolType());
-				case Tok.NotEqual:	return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.NE,  a, b, "cmp"), BoolType());
-
-				default: break;
-			}
+			default: throw new CompileError("impossible binary operator on char", loc);
 		}
-
-		throw new CompileError("impossible binary operator on char", loc);
 	}
 }
 
@@ -201,7 +192,7 @@ final class NumType : Type
 		super(name, code);
 	}
 
-	static LLVMValueRef numericCast(Environment env, LLVMValueRef val, NumType from, NumType to)
+	static LLVMValueRef buildCast(Environment env, LLVMValueRef val, NumType from, NumType to)
 	{
 		if(from is to)
 			return val;
@@ -232,18 +223,29 @@ final class NumType : Type
 			return LLVMBuildZExt(env.envBuilder, val, to.code, "intCast");
 	}
 
-	override Value valueUnary(Environment env, Tok op, Value lhs, Location loc)
+	Value buildUnary(Environment env, Tok op, LLVMValueRef val, Location loc)
 	{
-		if(op != Tok.Sub)
-			throw new CompileError("unsupported unary operator", loc);
-
-		final switch(kind)
+		switch(op)
 		{
-			case Kind.unsigned:
-			case Kind.signed:
-				return new RValue(LLVMBuildNeg(env.envBuilder, lhs.eval(env), "negInt"), this);
-			case Kind.floating:
-				return new RValue(LLVMBuildFNeg(env.envBuilder, lhs.eval(env), "negFp"), this);
+			case Tok.Sub: final switch(kind)
+			{
+				case Kind.unsigned:
+				case Kind.signed:
+					return new RValue(LLVMBuildNeg(env.envBuilder, val, "negInt"), this);
+				case Kind.floating:
+					return new RValue(LLVMBuildFNeg(env.envBuilder, val, "negFp"), this);
+			} break;
+
+			case Tok.Cat: final switch(kind)
+			{
+				case Kind.unsigned:
+				case Kind.signed:
+					return new RValue(LLVMBuildNot(env.envBuilder, val, "notInt"), this);
+				case Kind.floating:
+					throw new CompileError("cant not to a bitwise not on floating-point values", loc);
+			} break;
+
+			default: throw new CompileError("unknown unary operator on numeric value", loc);
 		}
 	}
 
@@ -258,33 +260,24 @@ final class NumType : Type
 			return NumType(max(a.numBits, b.numBits*2), a.kind);
 	}
 
-	override Value valueBinary(Environment env, Tok op, Value lhs, Value rhs, Location loc)
+	// build a binary numeric operation. Operands a and b have both to be of type 'this'
+	Value buildBinary(Environment env, Tok op, LLVMValueRef a, LLVMValueRef b, Location loc)
 	{
-		assert(lhs.type is this);
-		auto rhsType = cast(NumType)rhs.type;
-		if(rhsType is null)
-			throw new CompileError("cant do a binary with numeric and non-numeric value", loc);
-
-		NumType ty = commonType(this, rhsType);
-
-		auto a = numericCast(env, lhs.eval(env), this, ty);
-		auto b = numericCast(env, rhs.eval(env), rhsType, ty);
-
-		final switch(ty.kind)
+		final switch(kind)
 		{
 			case Kind.unsigned: switch(op)
 			{
-				case Tok.Add:	return new RValue(LLVMBuildAdd (env.envBuilder, a, b, "add"), ty);
-				case Tok.Sub:	return new RValue(LLVMBuildSub (env.envBuilder, a, b, "sub"), ty);
-				case Tok.Mul:	return new RValue(LLVMBuildMul (env.envBuilder, a, b, "mul"), ty);
-				case Tok.Div:	return new RValue(LLVMBuildUDiv(env.envBuilder, a, b, "div"), ty);
-				case Tok.Mod:	return new RValue(LLVMBuildURem(env.envBuilder, a, b, "mod"), ty);
+				case Tok.Add:	return new RValue(LLVMBuildAdd (env.envBuilder, a, b, "add"), this);
+				case Tok.Sub:	return new RValue(LLVMBuildSub (env.envBuilder, a, b, "sub"), this);
+				case Tok.Mul:	return new RValue(LLVMBuildMul (env.envBuilder, a, b, "mul"), this);
+				case Tok.Div:	return new RValue(LLVMBuildUDiv(env.envBuilder, a, b, "div"), this);
+				case Tok.Mod:	return new RValue(LLVMBuildURem(env.envBuilder, a, b, "mod"), this);
 
-				case Tok.And:	return new RValue(LLVMBuildAnd (env.envBuilder, a, b, "and"), ty);
-				case Tok.Or:	return new RValue(LLVMBuildOr  (env.envBuilder, a, b, "or" ), ty);
-				case Tok.Xor:	return new RValue(LLVMBuildXor (env.envBuilder, a, b, "xor"), ty);
-				case Tok.Shl:	return new RValue(LLVMBuildShl (env.envBuilder, a, b, "shl"), ty);
-				case Tok.Shr:	return new RValue(LLVMBuildLShr(env.envBuilder, a, b, "shr"), ty);
+				case Tok.And:	return new RValue(LLVMBuildAnd (env.envBuilder, a, b, "and"), this);
+				case Tok.Or:	return new RValue(LLVMBuildOr  (env.envBuilder, a, b, "or" ), this);
+				case Tok.Xor:	return new RValue(LLVMBuildXor (env.envBuilder, a, b, "xor"), this);
+				case Tok.Shl:	return new RValue(LLVMBuildShl (env.envBuilder, a, b, "shl"), this);
+				case Tok.Shr:	return new RValue(LLVMBuildLShr(env.envBuilder, a, b, "shr"), this);
 
 				case Tok.Less:			return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.ULT, a, b, "cmp"), BoolType());
 				case Tok.LessEqual:	return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.ULE, a, b, "cmp"), BoolType());
@@ -300,17 +293,17 @@ final class NumType : Type
 
 			case Kind.signed: switch(op)
 			{
-				case Tok.Add:	return new RValue(LLVMBuildAdd (env.envBuilder, a, b, "add"), ty);
-				case Tok.Sub:	return new RValue(LLVMBuildSub (env.envBuilder, a, b, "sub"), ty);
-				case Tok.Mul:	return new RValue(LLVMBuildMul (env.envBuilder, a, b, "mul"), ty);
-				case Tok.Div:	return new RValue(LLVMBuildSDiv(env.envBuilder, a, b, "div"), ty);
-				case Tok.Mod:	return new RValue(LLVMBuildSRem(env.envBuilder, a, b, "mod"), ty);
+				case Tok.Add:	return new RValue(LLVMBuildAdd (env.envBuilder, a, b, "add"), this);
+				case Tok.Sub:	return new RValue(LLVMBuildSub (env.envBuilder, a, b, "sub"), this);
+				case Tok.Mul:	return new RValue(LLVMBuildMul (env.envBuilder, a, b, "mul"), this);
+				case Tok.Div:	return new RValue(LLVMBuildSDiv(env.envBuilder, a, b, "div"), this);
+				case Tok.Mod:	return new RValue(LLVMBuildSRem(env.envBuilder, a, b, "mod"), this);
 
-				case Tok.And:	return new RValue(LLVMBuildAnd (env.envBuilder, a, b, "and"), ty);
-				case Tok.Or:	return new RValue(LLVMBuildOr  (env.envBuilder, a, b, "or" ), ty);
-				case Tok.Xor:	return new RValue(LLVMBuildXor (env.envBuilder, a, b, "xor"), ty);
-				case Tok.Shl:	return new RValue(LLVMBuildShl (env.envBuilder, a, b, "shl"), ty);
-				case Tok.Shr:	return new RValue(LLVMBuildAShr(env.envBuilder, a, b, "shr"), ty);
+				case Tok.And:	return new RValue(LLVMBuildAnd (env.envBuilder, a, b, "and"), this);
+				case Tok.Or:	return new RValue(LLVMBuildOr  (env.envBuilder, a, b, "or" ), this);
+				case Tok.Xor:	return new RValue(LLVMBuildXor (env.envBuilder, a, b, "xor"), this);
+				case Tok.Shl:	return new RValue(LLVMBuildShl (env.envBuilder, a, b, "shl"), this);
+				case Tok.Shr:	return new RValue(LLVMBuildAShr(env.envBuilder, a, b, "shr"), this);
 
 				case Tok.Less:			return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.SLT, a, b, "cmp"), BoolType());
 				case Tok.LessEqual:	return new RValue(LLVMBuildICmp(env.envBuilder, LLVMIntPredicate.SLE, a, b, "cmp"), BoolType());
@@ -326,11 +319,11 @@ final class NumType : Type
 
 			case Kind.floating: switch(op)
 			{
-				case Tok.Add:	return new RValue(LLVMBuildFAdd(env.envBuilder, a, b, "add"), ty);
-				case Tok.Sub:	return new RValue(LLVMBuildFSub(env.envBuilder, a, b, "sub"), ty);
-				case Tok.Mul:	return new RValue(LLVMBuildFMul(env.envBuilder, a, b, "mul"), ty);
-				case Tok.Div:	return new RValue(LLVMBuildFDiv(env.envBuilder, a, b, "div"), ty);
-				case Tok.Mod:	return new RValue(LLVMBuildFRem(env.envBuilder, a, b, "mod"), ty);
+				case Tok.Add:	return new RValue(LLVMBuildFAdd(env.envBuilder, a, b, "add"), this);
+				case Tok.Sub:	return new RValue(LLVMBuildFSub(env.envBuilder, a, b, "sub"), this);
+				case Tok.Mul:	return new RValue(LLVMBuildFMul(env.envBuilder, a, b, "mul"), this);
+				case Tok.Div:	return new RValue(LLVMBuildFDiv(env.envBuilder, a, b, "div"), this);
+				case Tok.Mod:	return new RValue(LLVMBuildFRem(env.envBuilder, a, b, "mod"), this);
 
 				case Tok.Less:			return new RValue(LLVMBuildFCmp(env.envBuilder, LLVMRealPredicate.OLT, a, b, "cmp"), BoolType());
 				case Tok.LessEqual:	return new RValue(LLVMBuildFCmp(env.envBuilder, LLVMRealPredicate.OLE, a, b, "cmp"), BoolType());
@@ -345,7 +338,6 @@ final class NumType : Type
 			break;
 		}
 
-		throw new CompileError("impossible binary operator", loc);
+		throw new CompileError("impossible binary operator on numeric values", loc);
 	}
-
 }

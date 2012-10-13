@@ -157,12 +157,6 @@ Value genExpression(ExpressionAst _ast, Environment env)	// env is for symbol-lo
 			case Tok.Cast:
 				return b.explicitCast(env, a.asType, ast.loc);
 
-			case Tok.Assign:
-			{
-				LLVMBuildStore(env.envBuilder, b.implicitCast(env, a.type, ast.loc).eval(env), a.evalRef(env));
-				return a;
-			}
-
 			case Tok.Comma:
 				return new Tuple([a, b]);
 

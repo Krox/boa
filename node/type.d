@@ -61,18 +61,6 @@ abstract class Type : Value
 		}
 	}
 
-	Value valueUnary(Environment env, Tok op, Value lhs, Location loc)	// TODO: maybe make the value*() methods abstract
-	{
-		assert(lhs.type is this);
-		throw new CompileError("unsupported valueUnary on type "~this.toString, loc);
-	}
-
-	Value valueBinary(Environment env, Tok op, Value lhs, Value rhs, Location loc)
-	{
-		assert(lhs.type is this);
-		throw new CompileError("unsupported valueBinary on type "~this.toString, loc);
-	}
-
 	Value valueIndex(Environment env, Value lhs, Value[] args, Location loc)
 	{
 		assert(lhs.type is this);

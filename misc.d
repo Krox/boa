@@ -25,15 +25,22 @@ enum Tok	// probably more to come here
 	CharLiteral,	// single character
 
 	Operator	= 0x0300,
+	// normal binaries
 	Add, Sub, Cat, Mul, Div, Mod,			// + - ~ * / %
-	Shl, Shr, And, Xor, Or, Bang,			// << >> & ^ | !
+	Shl, Shr, And, Xor, Or,					// << >> & ^ |
+
+	// binary-assigns
 	AddAssign, SubAssign, CatAssign,		// += -= ~=
 	MulAssign, DivAssign, ModAssign,		// *= /= %=
-	Assign, ShlAssign, ShrAssign,			// = <<= >>=
+	ShlAssign, ShrAssign,					// <<= >>=
 	AndAssign, XorAssign, OrAssign,			// &= ^= |=
+
+	// comparision
 	Equal, NotEqual, Is, NotIs,				// == != is !is
 	Less, Greater, LessEqual, GreaterEqual,	// < > <= >=
-	Comma, Map, AndAnd, OrOr,				// , -> && ||
+
+	// misc
+	Comma, Map, AndAnd, OrOr, Assign, Bang,	// , -> && || = !
 
 	Paren		= 0x0400,
 	OpenParen, CloseParen,		// ( )
@@ -51,6 +58,25 @@ enum Tok	// probably more to come here
 	Import, Module, Ref, New, Auto, Assert, Lambda, EndBlock, Line, File, Constructor, Destructor,
 
 	EOF			= 0xFF00,	// eof (end of sourcecode)
+}
+
+Tok isBinaryAssign(Tok op)
+{
+	switch(op) with(Tok)
+	{
+		case AddAssign: return Add;
+		case SubAssign: return Sub;
+		case CatAssign: return Cat;
+		case MulAssign: return Mul;
+		case DivAssign: return Div;
+		case ModAssign: return Mod;
+		case ShlAssign: return Shl;
+		case ShrAssign: return Shr;
+		case AndAssign: return And;
+		case XorAssign: return Xor;
+		case OrAssign: return Or;
+		default: return Null;
+	}
 }
 
 immutable class Location

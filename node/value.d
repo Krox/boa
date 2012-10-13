@@ -58,18 +58,49 @@ abstract class Value
 		return cast(T)LLVMConstIntGetZExtValue(val);	// zero-extension shouldn't matter, as it is truncated back to the exact type
 	}
 
-	Value binary(Environment env, Tok op, Value _rhs, Location loc)
+	Value binary(Environment env, Tok op, Value rhs, Location loc)
 	{
-		auto rhs = cast(Value)_rhs;
-		if(rhs is null)
-			throw new CompileError("cannot do a binary operator on a value and a non-value", loc);
+		if(op == Tok.Assign)
+		{
+			auto val = rhs.implicitCast(env, type, loc).eval(env);
+			LLVMBuildStore(env.envBuilder, val, evalRef(env));
+			return this;
+		}
 
-		return this.type.valueBinary(env, op, this, rhs, loc);
+		// TODO: operator overloading, enums, chars, 'is'/'!is'
+
+		if(auto o = isBinaryAssign(op))
+			return binary(env, Tok.Assign, binary(env, o, rhs, loc), loc);
+
+		if(auto lhsType = cast(NumType)this.type)
+			if(auto rhsType = cast(NumType)rhs.type)
+			{
+				auto ty = NumType.commonType(lhsType, rhsType);
+				auto a = NumType.buildCast(env, this.eval(env), lhsType, ty);
+				auto b = NumType.buildCast(env, rhs.eval(env), rhsType, ty);
+				return ty.buildBinary(env, op, a, b, loc);
+			}
+
+		if(this.type is BoolType())
+			if(rhs.type is BoolType())
+				return BoolType.buildBinary(env, op, this.eval(env), rhs.eval(env), loc);
+
+		if(this.type is CharType())
+			if(rhs.type is CharType())
+				return CharType.buildBinary(env, op, this.eval(env), rhs.eval(env), loc);
+
+		throw new CompileError("impossible binary operator '"~to!string(op)~"' on values of type "~type.toString~" and "~rhs.type.toString, loc);
 	}
 
 	Value unary(Environment env, Tok op, Location loc)
 	{
-		return this.type.valueUnary(env, op, this, loc);
+		if(auto ty = cast(NumType)type)
+			return ty.buildUnary(env, op, eval(env), loc);
+
+		if(type is BoolType())
+			return BoolType.buildUnary(env, op, eval(env), loc);
+
+		throw new CompileError("impossible unary operator '"~to!string(op)~"' on value of type "~type.toString, loc);
 	}
 
 	Value index(Environment env, Value[] args, Location loc)
@@ -150,7 +181,7 @@ abstract class Value
 					if(oldTy.numBits > newTy.numBits)
 						return null;
 
-				return new RValue(NumType.numericCast(env, eval(env), oldTy, newTy), newTy);
+				return new RValue(NumType.buildCast(env, eval(env), oldTy, newTy), newTy);
 			}
 
 		// int -> char
