@@ -54,7 +54,7 @@ enum Tok	// probably more to come here
 	Return, For,In, While,Break,
 	If, Else, DotDot,
 	Semi, Colon,
-	Dot, Quest, Struct, Class, Enum, Cast,
+	Dot, Quest, Struct, Class, Enum, Alias, Cast,
 	Import, Module, Ref, New, Auto, Assert, Lambda, EndBlock, Line, File, Constructor, Destructor,
 
 	EOF			= 0xFF00,	// eof (end of sourcecode)

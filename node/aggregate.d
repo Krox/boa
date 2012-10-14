@@ -47,7 +47,7 @@ final class AggregateSet : Value
 
 		auto agg = new Aggregate(name~"!("~code~")", ast, enclosing);
 		foreach(i; 0..args.length)
-			agg.members.add(ast.tempParams[i].ident, args[i]);
+			agg.members.add(ast.tempParams[i].ident, args[i], ast.tempParams[i].loc);
 		instances[code] = agg;
 		return agg;
 	}
@@ -149,42 +149,45 @@ final class Aggregate : Type, Environment
 		}
 
 		auto fieldCount = ast.superClass ? 1 : 0;
-		foreach(decl; ast.varDecls)
+
+		foreach(_decl; ast.decls)
+		if(auto decl = cast(VariableAst)_decl)
 		{
 			auto f = new Field(decl, fieldCount++, this);
 			fields ~= f;
-			members.add(decl.ident, f);
+			members.add(decl.ident, f, decl.loc);
 		}
-
-		foreach(decl; ast.funcDecls)
+		else if(auto decl = cast(FunctionAst)_decl)
 		{
-			if(decl[0].ident == "constructor")
+			if(decl.ident == "constructor")
 			{
 				assert(constructor is null, "two constructor-function-sets? impossible");
 				constructor = new FunctionSet(decl, /*enclosing*/this, /*superFun*/null);
-				members.add(decl[0].ident, constructor);
+				members.add(decl.ident, constructor, decl.loc);
 			}
 			else
 			{
 				FunctionSet superFun = null;
 				if(superType !is null)
-					if(auto x = superType.lookup(enclosing, decl[0].ident))
+					if(auto x = superType.lookup(enclosing, decl.ident))
 					{
 						superFun = cast(FunctionSet)x;
 						if(superFun is null)
-							throw new CompileError("function overriding a non-function", decl[0].loc);
+							throw new CompileError("function overriding a non-function", decl.loc);
 					}
 				auto f = new FunctionSet(decl, /*enclosing*/this, superFun);
 				if(f.isVirtual)
 					virtualMethods ~= f;
-				members.add(decl[0].ident, f);
+				members.add(decl.ident, f, decl.loc);
 			}
 		}
-
-		foreach(decl; ast.aggDecls)
+		else if(auto decl = cast(AliasAst)_decl)
+			members.add(decl.ident, new Alias(decl.expr, this));
+		else if(auto decl = cast(AggregateAst)_decl)
 			throw new Exception("nested agg not supported");
-		foreach(decl; ast.enumDecls)
+		else if(auto decl = cast(EnumAst)_decl)
 			throw new Exception("nested enum not supported");
+		else assert(false);
 	}
 
 	private int genStatus = 0;

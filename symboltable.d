@@ -1,69 +1,110 @@
 module symboltable;
 
+private import misc;
+private import ast;
+private import node.node;
 private import node.value;
 private import base.stack;
-
+private import codegen;
 
 final class SymbolTable
 {
 	private Value[string] table;
+	private Alias[string] aliases;
 
 	// null if not found
 	Value lookup(string ident)
 	{
-		//return table.get(ident, null);	// doesnt compile for some reason
 		if(ident in table)
-			return  table[ident];
+			return table[ident];
+
+		if(auto a = aliases.get(ident, null))
+		{
+			aliases.remove(ident);
+			return table[ident] = a.make();
+		}
+
 		return null;
 	}
 
-	void add(string ident, Value sym)
+	void add(string ident, Value sym, Location loc)
 	{
-		if(ident in table)
-			throw new Exception("shadowing declaration: " ~ ident);
+		if(ident in table || ident in aliases)
+			throw new CompileError("shadowing declaration: " ~ ident, loc);
 
 		table[ident] = sym;
 	}
+
+	void add(string ident, Alias a)
+	{
+		if(ident in table || ident in aliases)
+			throw new CompileError("shadowing alias declaration: " ~ ident, a.expr.loc);
+
+		aliases[ident] = a;
+	}
 }
 
-
-class LocalSymbolTable
+final class LocalSymbolTable
 {
-	private Stack!(Value[string]) table;
+	private Stack!SymbolTable scopes;
 
 	this()
 	{
-		table = new Stack!(Value[string]);
-		table.push((Value[string]).init);
+		scopes = new Stack!SymbolTable;
+		scopes.push(new SymbolTable);
 	}
 
 	// null if not found
-	final Value lookup(string name)
+	Value lookup(string ident)
 	{
-		assert(!table.isEmpty);
-		foreach(s; table)
-			if(name in s)
-				return s[name];
+		foreach(s; scopes)
+			if(auto r = s.lookup(ident))
+				return r;
+
 		return null;	// not found
 	}
 
-	final void add(string name, Value sym)
+	void add(string ident, Value sym, Location loc)
 	{
-		assert(!table.isEmpty);
-		foreach(s; table)
-			if(name in s)
-				throw new Exception("shadowing declaration: "~name);
-		table.top[name] = sym;
+		foreach(s; scopes)
+			if(null !is s.lookup(ident))
+				throw new CompileError("shadowing declaration: "~ident, loc);
+		scopes.top.add(ident, sym, loc);
 	}
 
-	final void push()
+	void add(string ident, Alias a)
 	{
-		table.push((Value[string]).init);
+		foreach(s; scopes)
+			if(null !is s.lookup(ident))
+				throw new CompileError("shadowing alias eclaration: "~ident, a.expr.loc);
+		scopes.top.add(ident, a);
 	}
 
-	final void pop()
+	void push()
 	{
-		table.pop();
+		scopes.push(new SymbolTable);
+	}
+
+	void pop()
+	{
+		scopes.pop();
+	}
+}
+
+final class Alias
+{
+	private ExpressionAst expr;
+	private Environment env;
+
+	this(ExpressionAst expr, Environment env)
+	{
+		this.expr = expr;
+		this.env = env;
+	}
+
+	Value make()
+	{
+		return genExpression(expr, env);
 	}
 }
 

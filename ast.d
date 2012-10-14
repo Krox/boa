@@ -92,64 +92,43 @@ final class EnumOptionAst : Ast
 	}
 }
 
-void sortDeclarations(DeclarationAst[] decls, ref FunctionAst[][] funcDecls, ref VariableAst[] varDecls, ref AggregateAst[] aggDecls, ref EnumAst[] enumDecls)	// TODO: remove this function. bad style
+// group function-declarations together
+private DeclarationAst[] groupDeclarations(DeclarationAst[] decls)
 {
-	sort!("a.ident < b.ident", SwapStrategy.stable)(decls);
+	DeclarationAst[] r;
+	FunctionAst[string] funs;
 
-	int j = 0;
-	for(int i = 0; i < decls.length; i=j)
-	{
-		j = i;
-		while(j<decls.length && decls[j].ident == decls[i].ident)
-			++j;
+	foreach(decl; decls)
+		if(auto funDecl = cast(FunctionAst)decl)
+		{
+			assert(funDecl.next is null, "used 'groupDeclarations' twice on same ASTs");
 
-		auto declGroup = decls[i..j];
-		if(auto ast = cast(FunctionAst)declGroup[0])
-		{
-			foreach(other; declGroup[1..$])
-				if(null is cast(FunctionAst)other)
-					throw new CompileError("cannot overload a function with a non-function", other.loc);
-			funcDecls ~= cast(FunctionAst[])declGroup;
+			if(auto set = funs.get(decl.ident, null))
+			{
+				funDecl.next = set.next;	// NOTE: this results in a strange order inside a function-set. But we dont really care
+				set.next = funDecl;
+			}
+			else
+				r ~= funs[decl.ident] = funDecl;
 		}
-		else if(auto ast = cast(VariableAst)declGroup[0])
-		{
-			if(declGroup.length>1)
-				throw new CompileError("cannot overload variables", declGroup[1].loc);
-			varDecls ~= ast;
-		}
-		else if(auto ast = cast(AggregateAst)declGroup[0])
-		{
-			if(declGroup.length>1)
-				throw new CompileError("cannot overload structs/classes", declGroup[1].loc);
-			aggDecls ~= ast;
-		}
-		else if(auto ast = cast(EnumAst)declGroup[0])
-		{
-			if(declGroup.length>1)
-				throw new CompileError("cannot overload enums", declGroup[1].loc);
-			enumDecls ~= ast;
-		}
-		else assert(false);
-	}
+		else
+			r ~= decl;
+
+	return r;
 }
 
 final class ModuleAst : Ast
 {
 	string[] name;
 	ImportAst[] imports;
-
-	FunctionAst[][] funcDecls;
-	VariableAst[] varDecls;
-	AggregateAst[] aggDecls;
-	EnumAst[] enumDecls;
+	DeclarationAst[] decls;
 
 	this(string name[], DeclarationAst[] decls, ImportAst[] imports, Location loc)
 	{
 		super(loc);
 		this.name = name;
 		this.imports = imports;
-
-		sortDeclarations(decls, funcDecls, varDecls, aggDecls, enumDecls);
+		this.decls = groupDeclarations(decls);
 	}
 }
 
@@ -389,6 +368,7 @@ class FunctionAst : DeclarationAst
 	TemplateParameterAst[] tempParams;	// there is a difference between null and []
 	BlockAst block;	// if this is null, it is just a declaration
 	Attribute flags;
+	FunctionAst next;	// singly-linked list for a set of overloaded functions
 
 	this(string name, ExpressionAst retType, bool retRef, ParameterAst[] params, TemplateParameterAst[] tempParams, BlockAst block, Attribute flags, Location loc)
 	{
@@ -428,10 +408,7 @@ final class AggregateAst : DeclarationAst
 	bool isClass;
 	TemplateParameterAst[] tempParams;
 	ExpressionAst superClass;	// might me null
-	FunctionAst[][] funcDecls;
-	VariableAst[] varDecls;
-	AggregateAst[] aggDecls;
-	EnumAst[] enumDecls;
+	DeclarationAst[] decls;
 
 	this(string name, bool isClass, ExpressionAst superClass, TemplateParameterAst[] tempParams, DeclarationAst[] decls, Location loc)
 	{
@@ -455,7 +432,7 @@ final class AggregateAst : DeclarationAst
 
 		this.superClass = superClass;
 		this.tempParams = tempParams;
-		sortDeclarations(decls, funcDecls, varDecls, aggDecls, enumDecls);
+		this.decls = groupDeclarations(decls);
 	}
 }
 
@@ -467,6 +444,17 @@ final class EnumAst : DeclarationAst
 	{
 		super(name, loc);
 		this.opts = opts;
+	}
+}
+
+final class AliasAst : DeclarationAst
+{
+	ExpressionAst expr;
+
+	this(string ident, ExpressionAst expr, Location loc)
+	{
+		super(ident, loc);
+		this.expr = expr;
 	}
 }
 

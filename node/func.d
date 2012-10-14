@@ -86,7 +86,7 @@ private final class Template
 
 		auto func = new Instance(outer.name~"!("~code~")", ast, outer.enclosing, outer.thisType, outer.superFun, outer.isVirtual);
 		foreach(i; 0..args.length)
-			func.locals.add(ast.tempParams[i].ident, args[i]);
+			func.locals.add(ast.tempParams[i].ident, args[i], ast.tempParams[i].loc);
 
 		instances[code] = func;
 		return func;
@@ -121,24 +121,22 @@ final class FunctionSet : Value
 		return name;
 	}
 
-	this(FunctionAst[] asts, Environment enclosing, FunctionSet superFun)
+	this(FunctionAst asts, Environment enclosing, FunctionSet superFun)
 	{
-		assert(asts.length > 0, "function without any declarations");
-
 		/// general properties
-		this.name = enclosing.envName~"."~asts[0].ident;
-		this.ident = asts[0].ident;
+		this.name = enclosing.envName~"."~asts.ident;
+		this.ident = asts.ident;
 		this.enclosing = enclosing;
 		this.superFun = superFun;
-		foreach(ast; asts[1..$])
-			if(asts[0].flags != ast.flags)
-				throw new CompileError("overloding functions need to have same attributes", asts[0].loc);
+		for(auto ast = asts.next; ast !is null; ast = ast.next)
+			if(asts.flags != ast.flags)
+				throw new CompileError("overloding functions need to have same attributes", asts.loc);
 
 		/// this-pointer
 		this.thisType = cast(Aggregate)enclosing;	// may be null
 		if(this.thisType !is (cast(Type)enclosing))
 			assert(false, "function in non-aggregate type");
-		if(asts[0].flags & Attribute.Static)
+		if(asts.flags & Attribute.Static)
 			thisType = null;
 		this.hasThis = (thisType !is null);
 
@@ -148,34 +146,34 @@ final class FunctionSet : Value
 			if(auto agg = cast(Aggregate)thisType)
 				if(agg.isClass)
 					isVirtual = true;
-		if((asts[0].flags & Attribute.Final) && !(asts[0].flags & Attribute.Override))
+		if((asts.flags & Attribute.Final) && !(asts.flags & Attribute.Override))
 			isVirtual = false;
-		if(asts[0].flags & Attribute.Static)
+		if(asts.flags & Attribute.Static)
 			isVirtual = false;
 		if(ident == "constructor")
 			isVirtual = false;
-		this.isOverride = ((asts[0].flags & Attribute.Override) != 0);
-		this.isFinal = ((asts[0].flags & Attribute.Final) != 0);
+		this.isOverride = ((asts.flags & Attribute.Override) != 0);
+		this.isFinal = ((asts.flags & Attribute.Final) != 0);
 
 
 		/// checking overriding rules
 		if(isOverride)
 		{
 			if(superFun is null)
-				throw new CompileError("function marked with override does not override anything", asts[0].loc);
+				throw new CompileError("function marked with override does not override anything", asts.loc);
 			if(!superFun.isVirtual)
-				throw new CompileError("can only override virtual functions", asts[0].loc);
+				throw new CompileError("can only override virtual functions", asts.loc);
 			if(superFun.isFinal)
-				throw new CompileError("can not override a final function", asts[0].loc);
+				throw new CompileError("can not override a final function", asts.loc);
 		}
 		else
 		{
 			if(superFun !is null)
-				throw new CompileError("missing override attribute", asts[0].loc);
+				throw new CompileError("missing override attribute", asts.loc);
 		}
 
 		/// create stuff itself
-		foreach(ast; asts)
+		for(auto ast = asts; ast !is null; ast = ast.next)
 			if(ast.tempParams !is null)
 				templates ~= new Template(this, ast);
 			else

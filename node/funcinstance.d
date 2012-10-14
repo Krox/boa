@@ -153,11 +153,11 @@ final class Instance : Value, Environment
 		{
 			if(funType.thisByRef)	thisPtr = new LValue(LLVMGetParam(funCode, 0), thisType);
 			else					thisPtr = new RValue(LLVMGetParam(funCode, 0), thisType);
-			locals.add("this", thisPtr);
+			locals.add("this", thisPtr, ast.loc);
 		}
 		foreach(i, p; funType.params)
-			if(p.byRef)	locals.add(ast.params[i].name, new LValue(LLVMGetParam(funCode, cast(uint)i+offset), p.type));
-			else		locals.add(ast.params[i].name, new RValue(LLVMGetParam(funCode, cast(uint)i+offset), p.type));
+			if(p.byRef)	locals.add(ast.params[i].name, new LValue(LLVMGetParam(funCode, cast(uint)i+offset), p.type), ast.params[i].loc);
+			else		locals.add(ast.params[i].name, new RValue(LLVMGetParam(funCode, cast(uint)i+offset), p.type), ast.params[i].loc);
 
 		// make the code itself
 		builder = LLVMCreateBuilder();
@@ -333,7 +333,7 @@ final class Instance : Value, Environment
 			enforce(range.lookup(this, "popFront")).call(this,null,null,ast.loc);
 
 			// main block
-			locals.add(ast.varName, var);
+			locals.add(ast.varName, var, ast.loc);
 			breakStack.push(afterBB);
 			genBlock(ast.block);
 			breakStack.pop();
@@ -445,9 +445,13 @@ final class Instance : Value, Environment
 				initCode = type.initCode;
 			LLVMBuildStore(builder, initCode, code);
 
-			locals.add(ast.ident, new LValue(code, type));
+			locals.add(ast.ident, new LValue(code, type), ast.loc);
 			return;
 		}
+
+		/// Alias statement
+		else if(auto ast = cast(AliasAst)_ast)
+			locals.add(ast.ident, genExpression(ast.expr, this), ast.loc);	// no forward-aliases in functions, so we generate it right away
 
 		/// Expression
 		else if(auto ast = cast(ExpressionAst)_ast)

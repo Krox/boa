@@ -52,23 +52,27 @@ final class Module : Value, Environment
 		foreach(s; map!"a.name"(modAst.imports))
 			imports ~= get(s);
 
-		foreach(ast; modAst.varDecls)
-			symbols.add(ast.ident, new GlobalVariable(ast, this));
-		foreach(ast; modAst.aggDecls)
+		foreach(_ast; modAst.decls)
+		if(auto ast = cast(VariableAst)_ast)
+			symbols.add(ast.ident, new GlobalVariable(ast, this), ast.loc);
+		else if(auto ast = cast(AggregateAst)_ast)
 			if(ast.tempParams is null)
-				symbols.add(ast.ident, new Aggregate(ast, this));
+				symbols.add(ast.ident, new Aggregate(ast, this), ast.loc);
 			else
-				symbols.add(ast.ident, new AggregateSet(ast, this));
-		foreach(ast; modAst.enumDecls)
-			symbols.add(ast.ident, new Enum(ast, this));
-		foreach(astGroup; modAst.funcDecls)
+				symbols.add(ast.ident, new AggregateSet(ast, this), ast.loc);
+		else if(auto ast = cast(EnumAst)_ast)
+			symbols.add(ast.ident, new Enum(ast, this), ast.loc);
+		else if(auto ast = cast(FunctionAst)_ast)
 		{
-			auto fun = new FunctionSet(astGroup, this, null);
-			if(astGroup[0].ident == "constructor")
+			auto fun = new FunctionSet(ast, this, null);
+			if(ast.ident == "constructor")
 				constructor = fun;
 			else
-				symbols.add(astGroup[0].ident, fun);
+				symbols.add(ast.ident, fun, ast.loc);
 		}
+		else if(auto ast = cast(AliasAst)_ast)
+			symbols.add(ast.ident, new Alias(ast.expr, this));
+		else assert(false);
 	}
 
 	final @property LLVMBuilderRef envBuilder()

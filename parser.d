@@ -405,6 +405,14 @@ class parse
 			return new EnumAst(name, opts, loc);
 		}
 
+		else if(ts.tryMatch(Tok.Alias))
+		{
+			auto expr = parseExpression();
+			auto ident = ts.match(Tok.Ident).value;
+			ts.match(Tok.Semi);
+			return new AliasAst(ident, expr, loc);
+		}
+
 		else if(ts.tryMatch(Tok.Import))
 		{
 			auto idents = parseDotIdents();

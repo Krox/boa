@@ -1,0 +1,11 @@
+// yes 36
+
+alias int T
+
+struct foo:
+	alias 17 a
+
+extern int main():
+	alias 19 b
+	T r = foo.a + b
+	return r
